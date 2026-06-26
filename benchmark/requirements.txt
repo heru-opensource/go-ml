@@ -1,0 +1,4 @@
+# Pinned to the versions go-ml's models were trained and validated against, so a
+# fresh venv reproduces the identical forest_bench model.
+scikit-learn==1.9.0
+numpy==2.5.0

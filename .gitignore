@@ -1,0 +1,20 @@
+# Build artifacts
+/bin/
+*.test
+*.out
+
+# Python virtualenvs (project root and benchmark/ have their own).
+.venv/
+# Any local pickled source models; go-ml's own models live in testdata/ as JSON.
+*.pkl
+
+# Editors
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
