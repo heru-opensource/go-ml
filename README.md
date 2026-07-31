@@ -73,7 +73,7 @@ and one static binary to deploy.
 go get github.com/heru-opensource/go-ml
 ```
 
-Requires Go 1.23 or newer. There are no third-party dependencies: the library is
+Requires Go 1.26 or newer. There are no third-party dependencies: the library is
 standard library only.
 
 ## Supported models
@@ -359,12 +359,12 @@ Iris dataset and synthetic `make_classification` datasets, one of them deliberat
 imbalanced — no external data — so the corpus is fully self-contained and
 reproducible with `make regen`.
 
-CI runs the suite with `-race` on Linux and macOS against the oldest and the
-newest supported Go, repeats it to shake out flakes, executes the godoc examples
-and the `examples/classify` program, and checks that the committed generated
-sources are exactly what `go-ml-gen` produces today. Python is deliberately *not*
-in CI: the models and fixtures are committed artifacts, and regenerating them
-requires one specific scikit-learn build.
+CI runs the suite with `-race` on Linux and macOS, repeats it to shake out
+flakes, executes the godoc examples and the `examples/classify` program, and
+checks that the committed generated sources are exactly what `go-ml-gen`
+produces today. Python is deliberately *not* in CI: the models and fixtures are
+committed artifacts, and regenerating them requires one specific scikit-learn
+build.
 
 ## Releasing
 

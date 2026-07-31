@@ -9,7 +9,8 @@ breaking change to the public API requires a minor bump and an entry here.
 
 ## [0.1.0] — 2026-07-31
 
-First release. The public API is the v0 contract.
+First release. The public API is the v0 contract. Requires Go 1.26 or newer, with
+no third-party dependencies.
 
 ### Added
 
