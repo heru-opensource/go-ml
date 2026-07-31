@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	goml "github.com/heru-public/go-ml"
-	_ "github.com/heru-public/go-ml/ensemble" // registers the tree-ensemble types
+	goml "github.com/heru-opensource/go-ml"
+	_ "github.com/heru-opensource/go-ml/ensemble" // registers the tree-ensemble types
 )
 
 func TestRegisteredTypes(t *testing.T) {

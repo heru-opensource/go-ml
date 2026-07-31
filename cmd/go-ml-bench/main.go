@@ -18,8 +18,8 @@ import (
 	"runtime"
 	"time"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/ensemble"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/ensemble"
 )
 
 func main() {
@@ -71,6 +71,8 @@ func main() {
 		benchCase(fmt.Sprintf("%d rows (parallel)", n), *dur, n, func() { sink(clf.PredictProba(X)) })
 		benchCase(fmt.Sprintf("%d rows (sequential)", n), *dur, n, func() { sink(seq.PredictProba(X)) })
 	}
+
+	fmt.Printf("\nchecksum: %g (accumulated from every result, so nothing is optimized away)\n", checksum)
 }
 
 func benchCase(name string, dur time.Duration, rows int, fn func()) {
@@ -110,7 +112,8 @@ func randRows(n, nf int) [][]float64 {
 	return X
 }
 
-// sink consumes a result so the compiler cannot eliminate the work.
+// sink consumes a result so the compiler cannot eliminate the work. main prints
+// the accumulated value, which is also what keeps it from being dead code.
 var checksum float64
 
 func sink(proba [][]float64, err error) {

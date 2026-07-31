@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/tree"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // TypeExtraTreesClassifier is the export "type" value for an extremely

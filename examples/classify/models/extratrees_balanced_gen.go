@@ -3,8 +3,8 @@
 package models
 
 import (
-	"github.com/heru-public/go-ml/ensemble"
-	"github.com/heru-public/go-ml/tree"
+	"github.com/heru-opensource/go-ml/ensemble"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // ExtraTreesBalanced is the statically compiled ExtraTreesClassifier

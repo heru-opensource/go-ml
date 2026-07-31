@@ -12,7 +12,7 @@ MODELS_DIR   := testdata/models
 FIXTURES_DIR := testdata/fixtures
 GEN_DIR      := examples/classify/models
 
-.PHONY: all build test vet fmt bench regen train gen doc clean
+.PHONY: all build test race lint vet fmt bench regen train gen doc clean
 
 all: fmt vet test
 
@@ -21,6 +21,15 @@ build:
 
 test:
 	$(GO) test ./...
+
+# What CI runs: prediction fans out across goroutines, so the race detector is
+# the check that matters most here.
+race:
+	$(GO) test -race -count=1 ./...
+
+# The same linters CI runs; needs golangci-lint v2 on PATH (see .golangci.yml).
+lint:
+	golangci-lint run ./...
 
 vet:
 	$(GO) vet ./...

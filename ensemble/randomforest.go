@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/tree"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // TypeRandomForestClassifier is the export "type" value for a random forest

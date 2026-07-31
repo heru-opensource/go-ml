@@ -17,8 +17,8 @@ Through the generic interface:
 
 ```go
 import (
-    goml "github.com/heru-public/go-ml"
-    _ "github.com/heru-public/go-ml/ensemble" // registers ExtraTreesClassifier
+    goml "github.com/heru-opensource/go-ml"
+    _ "github.com/heru-opensource/go-ml/ensemble" // registers ExtraTreesClassifier
 )
 
 clf, _ := goml.LoadClassifierFile("extratrees.json")
@@ -29,7 +29,7 @@ labels, _ := clf.Predict(X)
 Or through the concrete type, which adds single-row helpers and tuning:
 
 ```go
-import "github.com/heru-public/go-ml/ensemble"
+import "github.com/heru-opensource/go-ml/ensemble"
 
 et, _ := ensemble.LoadExtraTreesClassifier(jsonBytes, ensemble.WithWorkers(4))
 p, _  := et.PredictProbaRow(x)

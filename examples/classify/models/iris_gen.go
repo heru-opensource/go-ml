@@ -5,8 +5,8 @@ package models
 import (
 	"math"
 
-	"github.com/heru-public/go-ml/ensemble"
-	"github.com/heru-public/go-ml/tree"
+	"github.com/heru-opensource/go-ml/ensemble"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // Iris is the statically compiled RandomForestClassifier

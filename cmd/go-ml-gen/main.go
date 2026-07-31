@@ -32,7 +32,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/heru-public/go-ml/internal/jsonx"
+	"github.com/heru-opensource/go-ml/internal/jsonx"
 )
 
 func main() {
@@ -142,8 +142,8 @@ func generate(in, outPath, pkg, varName string) error {
 	if usesMath {
 		src.WriteString("\t\"math\"\n\n")
 	}
-	src.WriteString("\t\"github.com/heru-public/go-ml/ensemble\"\n")
-	src.WriteString("\t\"github.com/heru-public/go-ml/tree\"\n")
+	src.WriteString("\t\"github.com/heru-opensource/go-ml/ensemble\"\n")
+	src.WriteString("\t\"github.com/heru-opensource/go-ml/tree\"\n")
 	src.WriteString(")\n\n")
 	src.Write(body.Bytes())
 

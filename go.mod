@@ -1,3 +1,3 @@
-module github.com/heru-public/go-ml
+module github.com/heru-opensource/go-ml
 
 go 1.23.0

@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/ensemble"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/ensemble"
 )
 
 // A minimal go-ml/v1 export: a one-tree forest over a single feature that

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/heru-public/go-ml/ensemble"
+	"github.com/heru-opensource/go-ml/ensemble"
 )
 
 // loadBenchModel loads the forest_bench model (200 trees, 30 features) exported

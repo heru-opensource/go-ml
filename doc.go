@@ -1,6 +1,21 @@
 // Package goml runs trained machine-learning models in pure Go, with output
 // that matches the original scikit-learn estimator.
 //
+// # Caution: this library is fully AI-generated
+//
+// The implementation, tests, examples and documentation were all written by an
+// AI agent.
+//
+// Every shipped model is checked against scikit-learn's own outputs by the test
+// suite in the repository, but the only real-world validation is against
+// production workloads specific to Heru, Inc. Anything those workloads do not
+// exercise — other estimator types, other hyper-parameters, other scikit-learn
+// versions, other input regimes — is unproven, and exactness against a moving
+// upstream is exactly where that gap is most likely to hurt. Use it with
+// caution: read the code, validate your own exported model against your own
+// scikit-learn outputs, and treat the fidelity claims below as claims to verify
+// rather than as guarantees.
+//
 // # Goals
 //
 // The package is built around three ideas:
@@ -16,7 +31,7 @@
 //     are then usable through the same [Load] entry point, mirroring how
 //     image.RegisterFormat or database/sql drivers work. The models that ship
 //     today are RandomForestClassifier and ExtraTreesClassifier, both in
-//     package github.com/heru-public/go-ml/ensemble.
+//     package github.com/heru-opensource/go-ml/ensemble.
 //   - Faithful. Each model reproduces scikit-learn's prediction path exactly,
 //     down to its internal float32 cast and missing-value handling, so Go and
 //     Python agree to within floating-point rounding.
@@ -27,8 +42,8 @@
 // registration, then load by type from the export envelope:
 //
 //	import (
-//		goml "github.com/heru-public/go-ml"
-//		_ "github.com/heru-public/go-ml/ensemble" // registers the forest models
+//		goml "github.com/heru-opensource/go-ml"
+//		_ "github.com/heru-opensource/go-ml/ensemble" // registers the forest models
 //	)
 //
 //	clf, err := goml.LoadClassifierFile("model.json")

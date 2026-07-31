@@ -1,6 +1,23 @@
 # go-ml
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/heru-public/go-ml.svg)](https://pkg.go.dev/github.com/heru-public/go-ml)
+[![CI](https://github.com/heru-opensource/go-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/heru-opensource/go-ml/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/heru-opensource/go-ml.svg)](https://pkg.go.dev/github.com/heru-opensource/go-ml)
+
+> [!CAUTION]
+> **This library is fully AI-generated.** The implementation, tests, examples and
+> documentation were all written by an AI agent.
+>
+> Every shipped model is checked against scikit-learn's own outputs in this
+> repository's test suite, but its only real-world validation is against
+> production workloads specific to Heru, Inc. Anything those workloads do not
+> exercise — other estimator types, other hyper-parameters, other scikit-learn
+> versions, other input regimes — is unproven, and *exactness against a moving
+> upstream* is exactly where that gap is most likely to hurt.
+>
+> Use it with caution: read the code, validate your own exported model against
+> your own scikit-learn outputs, and treat
+> [Fidelity and its limits](#fidelity-and-its-limits) as claims to verify rather
+> than as guarantees.
 
 Run trained [scikit-learn](https://scikit-learn.org/) models in pure Go, with
 output that matches the original estimator **to floating-point rounding**
@@ -19,6 +36,45 @@ scikit-learn estimator ──(tools/sklexport)──▶ go-ml/v1 JSON ──┬�
 The framework is generic: each estimator type registers a decoder and becomes
 usable through the same `goml.Load` entry point, exactly like
 `image.RegisterFormat` or `database/sql` drivers.
+
+## Taste
+
+Once, in Python:
+
+```sh
+python -m sklexport.export model.pkl -o model.json
+```
+
+Forever after, in Go:
+
+```go
+import (
+    goml "github.com/heru-opensource/go-ml"
+    _ "github.com/heru-opensource/go-ml/ensemble" // registers the forest models
+)
+
+// Load once at startup — or //go:embed the JSON, or compile it in with go-ml-gen.
+clf, err := goml.LoadClassifierFile("model.json")
+if err != nil {
+    log.Fatal(err)
+}
+
+proba, _ := clf.PredictProba([][]float64{{1.2, 3.4, math.NaN()}}) // NaN = missing feature
+labels, _ := clf.Predict([][]float64{{1.2, 3.4, math.NaN()}})
+fmt.Println(clf.Classes(), proba, labels)
+```
+
+The same call shape as scikit-learn, none of scikit-learn's per-call overhead —
+and one static binary to deploy.
+
+## Install
+
+```sh
+go get github.com/heru-opensource/go-ml
+```
+
+Requires Go 1.23 or newer. There are no third-party dependencies: the library is
+standard library only.
 
 ## Supported models
 
@@ -48,12 +104,6 @@ format — lives here.
 * **Generic.** Small interfaces (`Model`, `Classifier`, `Regressor`) plus a type
   registry make adding models straightforward (see [Adding a model](#adding-a-model)).
 
-## Install
-
-```sh
-go get github.com/heru-public/go-ml
-```
-
 ## Usage
 
 The API mirrors scikit-learn and is the same for every classifier — program
@@ -64,8 +114,8 @@ slice per sample); use `math.NaN` for a missing feature.
 
 ```go
 import (
-    goml "github.com/heru-public/go-ml"
-    _ "github.com/heru-public/go-ml/ensemble" // register the model types you use
+    goml "github.com/heru-opensource/go-ml"
+    _ "github.com/heru-opensource/go-ml/ensemble" // register the models you use
 )
 
 clf, err := goml.LoadClassifierFile("model.json")
@@ -92,7 +142,7 @@ var clf, _ = goml.LoadClassifierBytes(modelJSON)
 ### Compile the model into Go source (fastest, no runtime parsing)
 
 ```sh
-go run github.com/heru-public/go-ml/cmd/go-ml-gen \
+go run github.com/heru-opensource/go-ml/cmd/go-ml-gen \
     -pkg models -var Model -o models/model_gen.go model.json
 ```
 
@@ -115,6 +165,72 @@ documented there.
 ```sh
 python -m sklexport.export your_model.pkl -o model.json
 ```
+
+## Fidelity and its limits
+
+What "matches scikit-learn" means here, precisely. Items 1–8 are what the test
+suite pins; items 9–12 are the boundaries of the claim.
+
+1. **float32 narrowing.** scikit-learn casts `X` to `float32` before traversal,
+   so every split compares `float64(float32(x)) <= threshold` with the threshold
+   left at `float64`. Values within a `float32` ULP of a threshold therefore
+   route identically in both languages.
+2. **Missing values.** A `NaN` feature does not compare: it follows the node's
+   learned `missing_go_to_left` flag. The `±Inf` thresholds scikit-learn writes
+   for pure missing-value splits round-trip through the export as string
+   sentinels, because JSON cannot spell them.
+3. **Per-tree normalization, then the mean.** Each tree contributes the
+   L1-normalized class distribution of the leaf reached; the ensemble's
+   probability is the mean over trees — the arithmetic scikit-learn's
+   `predict_proba` performs, in the same order.
+4. **Tie-breaking.** `Predict` takes the arg-max with ties resolved toward the
+   lowest column index, matching `numpy.argmax`.
+5. **Weighting is fit-time.** `class_weight="balanced"` and `sample_weight`
+   change the fitted leaves, not the prediction arithmetic, so a weighted model
+   needs no special handling — and the shipped `extratrees_balanced` model is
+   fitted that way so this is tested rather than assumed.
+6. **Determinism under parallelism.** The single-goroutine and row-parallel paths
+   are bit-for-bit identical to scikit-learn's single-threaded summation; the
+   tree-parallel path sums partial results in a fixed order, so it is
+   deterministic and agrees to floating-point rounding.
+7. **Static compilation preserves everything.** Generated Go emits every float64
+   in a form that parses back to identical bits, and it is validated against the
+   same scikit-learn fixtures as the JSON path.
+8. **Concurrency.** Loaded models are safe for concurrent use by multiple
+   goroutines.
+9. **Prediction only.** No training, no `partial_fit`, no preprocessing
+   pipelines. Whatever your Python code does to features before `predict_proba`,
+   your Go code must do too.
+10. **Single-output classifiers with numeric labels.** `n_outputs_ == 1` only,
+    and class labels come across as `float64` (scikit-learn's `classes_` cast);
+    string or otherwise non-numeric labels are out of scope. No regressor ships
+    yet, though the interfaces and registry are already generic over them.
+11. **go-ml is more permissive than scikit-learn about extreme inputs.**
+    scikit-learn's `check_array` rejects `±Inf`, and any value that overflows
+    `float32` (`|x| > ~3.4e38`) becomes `Inf` in that cast and is rejected too.
+    go-ml validates only the feature *count* — that per-call validation is
+    precisely the cost being avoided — so such inputs get an answer here and an
+    exception there. Within the finite `float32` range, the two agree.
+12. **Upstream is not pinned.** The fixtures in this repository were produced
+    with scikit-learn 1.9. The exporter reads only the public `tree_` arrays,
+    which have been stable for a long time, but nothing here can promise that a
+    future scikit-learn predicts the way today's does. Re-validate when you
+    upgrade.
+
+**Validating your own model** is the same procedure the repo runs on itself:
+generate reference outputs from your fitted estimator, then assert against them
+from Go.
+
+```sh
+cd tools/sklexport
+python export.py your_model.pkl -o /path/to/model.json
+python make_fixtures.py your_model.pkl -o /path/to/fixtures/
+```
+
+The fixture holds the input rows plus scikit-learn's exact `predict_proba` and
+`predict` for them, including rows with missing values and rows placed a hair
+either side of real split thresholds. [`validation_test.go`](validation_test.go)
+is the handful of Go that compares the two.
 
 ## Performance
 
@@ -155,6 +271,55 @@ Top-level changes stay minimal by design. To add an estimator type:
 Everything general — the loader, the embed/compile workflow, the export envelope —
 already works for the new type.
 
+## FAQ
+
+**Why not call Python from Go?** Because the expensive part of a scikit-learn
+prediction, one sample at a time, is not the tree traversal — it is
+`check_array`, dtype conversion and dispatch. Crossing a process or FFI boundary
+adds to that rather than removing it. Exporting the fitted model deletes the
+whole layer, along with the Python runtime in your deployment image.
+
+**Why a JSON export instead of reading the pickle?** A pickle is executable
+Python bound to the exact library versions that wrote it; it is neither safe nor
+stable to read from another language. The export is a plain, versioned document
+holding the fitted arrays — auditable, diffable, and readable by a Go program
+that has never heard of Python.
+
+**Why are class labels `float64`?** scikit-learn's `classes_` is numeric for the
+models supported here, and one numeric type keeps `Predict` allocation-free and
+the interfaces free of `any`. Label-encoding categorical targets is the normal
+scikit-learn workflow, and mapping the codes back is your program's business.
+
+**Does it train models?** No, and it is not meant to. Training belongs where the
+data science happens; this library only makes a fitted model cheap to serve.
+
+**How do I know my Go and Python agree?** Do not take it on faith — generate a
+fixture from your own estimator and compare, as described in
+[Fidelity and its limits](#fidelity-and-its-limits). That is exactly what CI does
+for the models in this repository.
+
+**What happens when I upgrade scikit-learn?** Re-export, regenerate the fixture,
+re-run the comparison. An export captures an already-fitted tree, so an upgrade
+that changes *training* cannot affect it — but one that changed *prediction*
+would, and the fixture is what would catch it.
+
+## Roadmap
+
+Deliberately out of scope today, and documented rather than half-built:
+
+- **Regressors** — `RandomForestRegressor` / `ExtraTreesRegressor` are the
+  obvious next step: `goml.Regressor` and the registry already accommodate them,
+  and a leaf holds the same shape of payload.
+- **Gradient boosting** — `HistGradientBoostingClassifier` has a different tree
+  representation (binned thresholds, its own missing-value handling), so it needs
+  its own decoder rather than a reuse of `tree`.
+- **Multi-output models** — the export format carries `n_outputs`, and the
+  loaders reject anything but 1 rather than silently mis-predicting.
+- **Non-numeric class labels** — would mean a label type parameter or a side
+  table in the envelope; deliberately not guessed at yet.
+- **Preprocessing pipelines** — scalers and encoders are a far larger surface
+  than trees, and a partial implementation would be worse than none.
+
 ## Documentation
 
 API docs are standard godoc:
@@ -184,6 +349,8 @@ go run golang.org/x/tools/cmd/godoc@latest -http=:6060    # browser, like pkg.go
 
 ```sh
 make test     # all tests, incl. bit-exact validation against scikit-learn outputs
+make race     # the same suite under the race detector, as CI runs it
+make lint     # golangci-lint v2, same configuration as CI
 make regen    # retrain models + rebuild fixtures and generated code (needs the venv)
 ```
 
@@ -191,6 +358,56 @@ The models and fixtures under `testdata/` are trained from scratch on scikit-lea
 Iris dataset and synthetic `make_classification` datasets, one of them deliberately
 imbalanced — no external data — so the corpus is fully self-contained and
 reproducible with `make regen`.
+
+CI runs the suite with `-race` on Linux and macOS against the oldest and the
+newest supported Go, repeats it to shake out flakes, executes the godoc examples
+and the `examples/classify` program, and checks that the committed generated
+sources are exactly what `go-ml-gen` produces today. Python is deliberately *not*
+in CI: the models and fixtures are committed artifacts, and regenerating them
+requires one specific scikit-learn build.
+
+## Releasing
+
+A Go module is published by pushing a semver tag — there is no registry to upload
+to. The module proxy fetches the tag from this repository on demand, and
+pkg.go.dev indexes it from there.
+
+```sh
+# 1. land the release notes FIRST — a `## [0.1.0]` heading in CHANGELOG.md is a
+#    hard requirement, and the tag cannot be reused if you forget it. Push that
+#    to main.
+# 2. then tag the commit CI is green on:
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Pushing the tag triggers [`release.yml`](.github/workflows/release.yml), which
+re-runs every CI gate against the tagged commit, checks the tag is one Go can
+actually consume and that the version is documented, cuts a GitHub Release with
+generated notes, and asks proxy.golang.org for the version so pkg.go.dev indexes
+it promptly instead of waiting for someone's first `go get`.
+
+**Tags are effectively immutable.** Once the proxy has fetched a version it caches
+it permanently; moving or deleting the tag does not un-publish anything, and
+consumers may already have the old bytes in their `go.sum`. A bad release is
+fixed by cutting the next patch version, never by retagging. That is why the
+workflow's pre-flight checks fail loudly rather than trying to paper over
+anything:
+
+| Check | Why it is fatal |
+|---|---|
+| strict semver (`vMAJOR.MINOR.PATCH[-pre]`) | Go silently ignores tags it cannot parse, so a typo is a release that never appears |
+| major version agrees with the module path | `v2.0.0` needs the module path to end in `/v2`, or nobody can import it |
+| no `replace` directives in `go.mod` | `replace` does not apply to consumers, so the module would not resolve for them |
+| `## [VERSION]` heading in `CHANGELOG.md` | every released version must be documented; an undocumented release is not a release |
+
+Because the changelog check is a hard gate, write the entry before you tag. If a
+tag does fail this check, no GitHub Release is written — add the entry on the
+default branch and cut the next patch version.
+
+Everything here is one module, including the examples and the `testdata/` corpus,
+so a consumer gets a library that is verifiable from the tag alone. The Python
+tooling under `tools/` ships with it but is not on any Go import path.
 
 ## License
 

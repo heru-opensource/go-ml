@@ -1,0 +1,156 @@
+name: Release
+
+# A Go module is published by pushing a semver tag — there is no registry to
+# upload to. The module proxy fetches the tag from this repository on first
+# request, and pkg.go.dev indexes it from there. So this workflow does the three
+# things that actually need doing:
+#
+#   1. re-run every CI gate against the tagged commit;
+#   2. verify the tag is one Go can consume (strict semver, major version
+#      agreeing with the module path, no replace directives) and that the release
+#      is documented in CHANGELOG.md;
+#   3. cut a GitHub Release and ask the proxy to fetch the version now, rather
+#      than waiting for someone's first `go get`.
+#
+# One thing to know before pushing a tag: once the proxy has fetched a version it
+# caches it immutably, so a tag cannot be meaningfully corrected after the fact.
+# Moving or deleting it does not un-publish anything — you cut a new patch
+# version instead. That is why the pre-flight checks below fail loudly rather
+# than trying to fix anything up.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  # Everything CI checks, against the tagged commit. A red X here means the tag
+  # is already published (the proxy will serve it) but is known-broken, so the
+  # release notes never get written and the failure is the signal to cut a fix.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: publish ${{ github.ref_name }}
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create the GitHub Release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # release notes are generated from history
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: go.mod
+
+      - name: verify the tag is consumable by Go
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+
+          # Strict semver: Go ignores tags it cannot parse, so a typo here is a
+          # release that silently never appears.
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.]+(\.[0-9A-Za-z.]+)*)?(\+[0-9A-Za-z.-]+)?$'
+          if ! printf '%s' "$tag" | grep -Eq "$semver"; then
+            echo "::error::tag '$tag' is not a valid Go semver tag (want vMAJOR.MINOR.PATCH[-prerelease])"
+            exit 1
+          fi
+
+          module="$(go list -m)"
+          major="${tag#v}"
+          major="${major%%.*}"
+          base="${module%/v[0-9]*}" # module path without any existing /vN suffix
+          echo "tag=$tag module=$module major=$major"
+
+          # v2+ must live at a /vN import path; v0 and v1 must not.
+          if [ "$major" -ge 2 ]; then
+            case "$module" in
+              */v"$major") : ;;
+              *)
+                echo "::error::tag '$tag' needs module path '$base/v$major' — bump the module line in go.mod (and the import paths) before releasing a v$major"
+                exit 1
+                ;;
+            esac
+          else
+            case "$module" in
+              */v[0-9]*)
+                echo "::error::module path '$module' carries a major-version suffix but the tag is '$tag'"
+                exit 1
+                ;;
+            esac
+          fi
+
+          # A published module must resolve for everyone else, so it cannot carry
+          # replace directives.
+          if [ "$(go mod edit -json | jq -r '.Replace | length')" != "0" ]; then
+            echo "::error::go.mod contains replace directives, which do not apply to consumers — remove them before releasing"
+            go mod edit -json | jq '.Replace'
+            exit 1
+          fi
+
+          go mod verify
+          echo "module=$module" >> "$GITHUB_ENV"
+
+      - name: require a changelog entry for this version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          # Substring match on the heading prefix, so a trailing release date is
+          # fine and the link-reference definitions at the bottom of the file do
+          # not count as an entry.
+          if ! grep -qF "## [$version]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' heading. Every release must be documented: add the entry on the default branch, then tag the next patch version — this tag is already public and cannot be reused."
+            exit 1
+          fi
+          echo "CHANGELOG.md documents $version"
+
+      - name: create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          # A tag with a prerelease segment is marked as such, so `latest` keeps
+          # pointing at the newest stable version.
+          prerelease=""
+          case "$tag" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            --verify-tag \
+            $prerelease
+
+      # Asking the proxy for the version is what makes it appear on pkg.go.dev
+      # promptly; without it, indexing waits for the first person to `go get` it.
+      # Best-effort by design: the module is published either way.
+      - name: warm the module proxy and pkg.go.dev
+        run: |
+          set -uo pipefail
+          tag="${GITHUB_REF_NAME}"
+          scratch="$(mktemp -d)"
+          # A throwaway module, so `go list` resolves the escaped path itself
+          # rather than us hand-rolling proxy URL encoding.
+          (cd "$scratch" && go mod init proxy-warm >/dev/null)
+          for attempt in 1 2 3 4 5 6; do
+            # env -u rather than `VAR= cmd`: unset any inherited GOFLAGS/GOPRIVATE
+            # that would route around the public proxy.
+            if (cd "$scratch" && env -u GOFLAGS -u GOPRIVATE \
+                  GOPROXY=https://proxy.golang.org go list -m "$module@$tag"); then
+              echo "proxy is serving $module@$tag"
+              echo "docs: https://pkg.go.dev/$module@$tag"
+              exit 0
+            fi
+            echo "attempt $attempt: not indexed yet, retrying in 15s"
+            sleep 15
+          done
+          echo "::warning::the proxy had not indexed $module@$tag after ~90s; it will fetch the tag on first request"

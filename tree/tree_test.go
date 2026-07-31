@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/heru-public/go-ml/internal/jsonx"
+	"github.com/heru-opensource/go-ml/internal/jsonx"
 )
 
 // stump builds a 3-node tree: root splits on feature 0 at the given threshold,

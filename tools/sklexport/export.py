@@ -1,10 +1,10 @@
 """Export scikit-learn models to the generic go-ml JSON format.
 
 This tool serializes a fitted scikit-learn estimator into a portable, versioned
-JSON document that the Go ``github.com/heru-public/go-ml`` package can load (or
-compile statically). It is deliberately *generic*: a small registry maps each
-supported estimator class to an exporter function, so new model types can be
-added without touching the Go side's envelope handling.
+JSON document that the Go ``github.com/heru-opensource/go-ml`` package can load
+(or compile statically). It is deliberately *generic*: a small registry maps
+each supported estimator class to an exporter function, so new model types can
+be added without touching the Go side's envelope handling.
 
 The JSON envelope is::
 

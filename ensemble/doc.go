@@ -16,5 +16,5 @@
 // Importing this package registers its model types with the parent goml
 // package, so they can be loaded through goml.Load:
 //
-//	import _ "github.com/heru-public/go-ml/ensemble"
+//	import _ "github.com/heru-opensource/go-ml/ensemble"
 package ensemble

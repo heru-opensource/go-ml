@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"sync"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/internal/jsonx"
-	"github.com/heru-public/go-ml/tree"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/internal/jsonx"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // parallelMinWork is the rows×trees product below which prediction runs on a

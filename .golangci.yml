@@ -1,0 +1,31 @@
+# golangci-lint v2 configuration.
+#
+# The default ("standard") set plus a few checks that catch real mistakes, minus
+# two that do not fit this codebase:
+#
+#   err113      the loader and the models wrap sentinel errors (ErrFormat,
+#               ErrUnknownType, ErrNumFeatures) but also report plenty of
+#               one-off structural problems in an export; a blanket ban on
+#               dynamic errors would only turn those into noise.
+#   exhaustive  the one type switch here (go-ml-gen dispatching on an export's
+#               estimator name) switches on untrusted input data, so its
+#               default: branch is the point rather than a missing case.
+#
+# Generated model sources (examples/classify/models/*_gen.go) carry the standard
+# "Code generated ... DO NOT EDIT." banner and are excluded by the default
+# generated-file handling.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - copyloopvar
+    - misspell
+    - unconvert
+  disable:
+    - err113
+    - exhaustive
+
+formatters:
+  enable:
+    - gofmt

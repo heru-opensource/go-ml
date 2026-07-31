@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/ensemble"
-	"github.com/heru-public/go-ml/internal/jsonx"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/ensemble"
+	"github.com/heru-opensource/go-ml/internal/jsonx"
 )
 
 // fixture is the JSON produced by tools/sklexport/make_fixtures.py: a batch of
@@ -47,7 +47,6 @@ func TestAgainstSklearn(t *testing.T) {
 	const probaTol = 1e-9
 
 	for _, name := range validationModels {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			clf, err := goml.LoadClassifierFile(filepath.Join("testdata", "models", name+".json"))
 			if err != nil {

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/heru-public/go-ml/internal/jsonx"
+	"github.com/heru-opensource/go-ml/internal/jsonx"
 )
 
 // Tree is a fitted binary decision tree in scikit-learn's flat-array form.

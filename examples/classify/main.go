@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"math"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/examples/classify/models"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/examples/classify/models"
 )
 
 func main() {

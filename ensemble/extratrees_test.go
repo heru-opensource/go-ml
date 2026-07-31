@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/tree"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // tinyExtraTrees is the ExtraTreesClassifier counterpart of tinyForest, built

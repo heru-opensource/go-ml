@@ -16,8 +16,8 @@ Through the generic interface:
 
 ```go
 import (
-    goml "github.com/heru-public/go-ml"
-    _ "github.com/heru-public/go-ml/ensemble" // registers RandomForestClassifier
+    goml "github.com/heru-opensource/go-ml"
+    _ "github.com/heru-opensource/go-ml/ensemble" // registers the forest models
 )
 
 clf, _ := goml.LoadClassifierFile("forest.json")
@@ -28,7 +28,7 @@ labels, _ := clf.Predict([][]float64{{5.1, 3.5, 1.4, 0.2}})
 Or through the concrete type, which adds single-row helpers and tuning:
 
 ```go
-import "github.com/heru-public/go-ml/ensemble"
+import "github.com/heru-opensource/go-ml/ensemble"
 
 rf, _ := ensemble.LoadRandomForestClassifier(jsonBytes, ensemble.WithWorkers(4))
 p, _  := rf.PredictProbaRow([]float64{5.1, 3.5, 1.4, 0.2})

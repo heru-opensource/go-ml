@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	goml "github.com/heru-public/go-ml"
-	"github.com/heru-public/go-ml/tree"
+	goml "github.com/heru-opensource/go-ml"
+	"github.com/heru-opensource/go-ml/tree"
 )
 
 // oneSplit returns a stump that emits class 0 when feature f <= 0.5, else

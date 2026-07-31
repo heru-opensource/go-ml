@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Lets release.yml run these exact gates against the tagged commit instead of
+  # keeping a second, drifting copy of them.
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # Never let the toolchain silently download a different Go than the matrix
+  # selected: the point of the matrix is to prove the go.mod floor really builds.
+  GOTOOLCHAIN: local
+
+jobs:
+  test:
+    name: test (go ${{ matrix.go }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in go.mod and the current release. Anything in
+        # between is covered by those two ends in practice.
+        go: ["1.23.x", "1.26.x"]
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          # There is no go.sum: this module has no third-party dependencies, so
+          # the cache is keyed on go.mod instead.
+          cache-dependency-path: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test -race
+        run: go test -race -count=1 ./...
+
+      # Guards against goroutine-scheduling flakes that a single run can hide:
+      # prediction fans out across goroutines, and the row-parallel and
+      # tree-parallel paths must agree with the sequential one every time.
+      - name: go test -race -count=3
+        run: go test -race -count=3 ./...
+
+      - name: godoc examples
+        run: go test -run Example -count=1 ./...
+
+      - name: run the example program
+        run: go run ./examples/classify
+
+      # The committed *_gen.go files are the static-compilation path's product;
+      # if the generator and the checked-in source drift apart, the codegen test
+      # is validating something nobody ships. Regenerate and diff to catch it.
+      # Only on one cell of the matrix: go/format output is toolchain-specific,
+      # and the committed files are formatted by the newest supported Go.
+      - name: generated model sources are up to date
+        if: matrix.go == '1.26.x' && matrix.os == 'ubuntu-latest'
+        run: |
+          make gen
+          git diff --exit-code -- examples/classify/models
+
+  # The Python tooling under tools/sklexport is deliberately absent from CI. The
+  # models and fixtures it produces are committed artifacts, and reproducing them
+  # requires one specific scikit-learn build; a floating install would rewrite
+  # them and fail for reasons that have nothing to do with the Go code. `make
+  # regen` is the human-run path, and its output is reviewed in the diff.
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: go.mod
+
+      - name: lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
