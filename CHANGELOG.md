@@ -7,6 +7,20 @@ breaking change to the public API requires a minor bump and an entry here.
 
 ## [Unreleased]
 
+### Added
+
+- **Two more runnable examples.** `examples/serve` is the service shape: the
+  model is embedded with `//go:embed`, decoded once at startup and shared by
+  every handler, with JSON `null` as a missing feature and a wrong feature count
+  answered as a `400`. `examples/batch` is offline scoring: a model loaded from a
+  file, CSV in and out, an empty field as a missing feature, and the whole file
+  passed to one `PredictProba` call. Both run in CI.
+- **Godoc examples.** The root package now documents loading, missing features
+  and the sentinel errors by example, plus a whole-file example that implements
+  and registers a new estimator type. The `tree` package documents `Apply`,
+  `Decide`, `AddTo` and decoding the serialized form (including its `"Infinity"`
+  threshold sentinel), and `ensemble.WithWorkers` shows the worker knob.
+
 ## [0.1.0] — 2026-07-31
 
 First release. The public API is the v0 contract. Requires Go 1.26 or newer, with

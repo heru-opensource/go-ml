@@ -12,7 +12,7 @@ MODELS_DIR   := testdata/models
 FIXTURES_DIR := testdata/fixtures
 GEN_DIR      := examples/classify/models
 
-.PHONY: all build test race lint vet fmt bench regen train gen doc clean
+.PHONY: all build test race lint vet fmt bench regen train gen examples doc clean
 
 all: fmt vet test
 
@@ -48,11 +48,21 @@ train:
 	PYTHONPATH=tools/sklexport $(PY) tools/sklexport/train_examples.py \
 		--models-dir $(MODELS_DIR) --fixtures-dir $(FIXTURES_DIR)
 
-# Compile the example models into Go source for examples/classify.
+# Everything the examples derive from a model: Go source for examples/classify,
+# and the JSON examples/serve embeds (//go:embed cannot reach outside its own
+# directory, so that copy is generated rather than referenced).
 gen: build
 	$(GO) run ./cmd/go-ml-gen -pkg models -var Iris -o $(GEN_DIR)/iris_gen.go $(MODELS_DIR)/iris.json
 	$(GO) run ./cmd/go-ml-gen -pkg models -var ExtraTreesBalanced \
 		-o $(GEN_DIR)/extratrees_balanced_gen.go $(MODELS_DIR)/extratrees_balanced.json
+	cp $(MODELS_DIR)/iris.json examples/serve/iris.json
+
+# Run every example program, as CI does.
+examples:
+	@for dir in classify serve batch; do \
+		echo "===== examples/$$dir ====="; \
+		$(GO) run ./examples/$$dir || exit 1; \
+	done
 
 doc:
 	$(GO) doc -all ./...

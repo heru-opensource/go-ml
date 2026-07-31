@@ -105,6 +105,29 @@ func ExampleLoadForest() {
 	// ExtraTreesClassifier   trees=1 class=1
 }
 
+// ExampleWithWorkers caps the goroutines a single prediction call may use.
+// Large batches and large forests are split across goroutines by default
+// (GOMAXPROCS); WithWorkers(1) forces the sequential path, which is the one
+// that is bit-for-bit identical to scikit-learn's single-threaded summation.
+// Every setting agrees to floating-point rounding, so this is a throughput
+// knob, not a correctness one.
+func ExampleWithWorkers() {
+	seq, err := ensemble.LoadForest([]byte(miniForest), ensemble.WithWorkers(1))
+	if err != nil {
+		log.Fatal(err)
+	}
+	par, err := ensemble.LoadForest([]byte(miniForest), ensemble.WithWorkers(4))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	a, _ := seq.PredictProbaRow([]float64{0.9})
+	b, _ := par.PredictProbaRow([]float64{0.9})
+	fmt.Printf("%.1f == %.1f: %v\n", a, b, a[0] == b[0] && a[1] == b[1])
+	// Output:
+	// [0.0 1.0] == [0.0 1.0]: true
+}
+
 func TestLoadEnvelopeRoundTrip(t *testing.T) {
 	rf, err := ensemble.LoadRandomForestClassifier([]byte(miniForest), ensemble.WithWorkers(2))
 	if err != nil {

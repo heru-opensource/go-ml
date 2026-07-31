@@ -152,9 +152,39 @@ import "your/module/models"
 proba, _ := models.Model.PredictProba(X) // models.Model is a package-level var
 ```
 
-The runnable [`examples/classify`](examples/classify) loads two statically
-compiled models — a random forest and a balanced extra-trees model — and
-predicts with both through the same interface.
+See [Examples](#examples) for runnable programs covering all three approaches.
+
+## Examples
+
+Runnable programs, each narrating its own output and exiting. Between them they
+cover the three ways a model reaches production — pick the one that matches your
+deployment:
+
+```sh
+go run ./examples/classify   # compiled in as Go source (go-ml-gen)
+go run ./examples/serve      # embedded JSON (//go:embed), served over HTTP
+go run ./examples/batch      # loaded from a file, scoring a CSV in bulk
+```
+
+- [`examples/classify`](examples/classify/main.go) — two statically compiled
+  models, a random forest and a balanced extra-trees model, predicted through
+  one `goml.Classifier` interface. Nothing in the program depends on which
+  estimator it holds.
+- [`examples/serve`](examples/serve/main.go) — the service shape: the model is
+  embedded in the binary, decoded once at startup, and shared by every handler
+  with no pool and no lock. Shows JSON `null` as a missing feature, a wrong
+  feature count answered as `400` via `errors.Is(err, goml.ErrNumFeatures)`, and
+  concurrent requests agreeing exactly.
+- [`examples/batch`](examples/batch/main.go) — offline scoring: a model loaded
+  from a file, a CSV in and a CSV out, an empty field as a missing feature, and
+  the whole file passed to a single `PredictProba` call so the rows can be spread
+  across goroutines. Takes `-model`, `-csv` and `-workers`, so it doubles as a
+  scoring tool for your own export.
+
+The API documentation carries
+[runnable godoc examples](https://pkg.go.dev/github.com/heru-opensource/go-ml#pkg-examples)
+as well, including a whole-file one that implements and registers a new
+estimator type. They run in CI, so they cannot drift from the code.
 
 ## Exporting a model
 
@@ -341,17 +371,18 @@ go run golang.org/x/tools/cmd/godoc@latest -http=:6060    # browser, like pkg.go
 | `tools/sklexport/` | Python exporter, model trainer, and test-fixture generator. |
 | `benchmark/` | Standalone scikit-learn benchmark harness (its own venv). |
 | `docs/` | Per-model documentation. |
-| `examples/` | Runnable examples. |
+| `examples/` | Runnable examples: static compilation, an HTTP service, CSV batch scoring. |
 | `internal/jsonx/` | Tolerant float decoding (handles `±Inf`/`NaN` sentinels). |
 | `testdata/` | Exported models and scikit-learn reference outputs used by the tests. |
 
 ## Testing
 
 ```sh
-make test     # all tests, incl. bit-exact validation against scikit-learn outputs
-make race     # the same suite under the race detector, as CI runs it
-make lint     # golangci-lint v2, same configuration as CI
-make regen    # retrain models + rebuild fixtures and generated code (needs the venv)
+make test      # all tests, incl. bit-exact validation against scikit-learn outputs
+make race      # the same suite under the race detector, as CI runs it
+make lint      # golangci-lint v2, same configuration as CI
+make examples  # run every example program
+make regen     # retrain models + rebuild fixtures and generated code (needs the venv)
 ```
 
 The models and fixtures under `testdata/` are trained from scratch on scikit-learn's
@@ -360,11 +391,10 @@ imbalanced — no external data — so the corpus is fully self-contained and
 reproducible with `make regen`.
 
 CI runs the suite with `-race` on Linux and macOS, repeats it to shake out
-flakes, executes the godoc examples and the `examples/classify` program, and
-checks that the committed generated sources are exactly what `go-ml-gen`
-produces today. Python is deliberately *not* in CI: the models and fixtures are
-committed artifacts, and regenerating them requires one specific scikit-learn
-build.
+flakes, executes the godoc examples and every example program, and checks that
+the committed generated artifacts are exactly what `make gen` produces today.
+Python is deliberately *not* in CI: the models and fixtures are committed
+artifacts, and regenerating them requires one specific scikit-learn build.
 
 ## Releasing
 
