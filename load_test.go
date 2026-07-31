@@ -3,23 +3,20 @@ package goml_test
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	goml "github.com/heru-public/go-ml"
-	_ "github.com/heru-public/go-ml/ensemble" // register RandomForestClassifier
+	_ "github.com/heru-public/go-ml/ensemble" // registers the tree-ensemble types
 )
 
 func TestRegisteredTypes(t *testing.T) {
 	types := goml.RegisteredTypes()
-	found := false
-	for _, ty := range types {
-		if ty == "RandomForestClassifier" {
-			found = true
+	for _, want := range []string{"RandomForestClassifier", "ExtraTreesClassifier"} {
+		if !slices.Contains(types, want) {
+			t.Errorf("%s not registered; have %v", want, types)
 		}
-	}
-	if !found {
-		t.Errorf("RandomForestClassifier not registered; have %v", types)
 	}
 }
 

@@ -4,7 +4,7 @@
 
 Run trained [scikit-learn](https://scikit-learn.org/) models in pure Go, with
 output that matches the original estimator **to floating-point rounding**
-(observed max difference: `4.4e-16`).
+(observed max difference across the shipped models: `9.4e-16`).
 
 A model is exported once from Python into a portable JSON document and then
 either loaded at startup or — for maximum speed and zero runtime dependencies —
@@ -25,6 +25,11 @@ usable through the same `goml.Load` entry point, exactly like
 | scikit-learn estimator | Go package | Documentation |
 | --- | --- | --- |
 | `RandomForestClassifier` | [`ensemble`](ensemble) | [docs/randomforestclassifier.md](docs/randomforestclassifier.md) |
+| `ExtraTreesClassifier` | [`ensemble`](ensemble) | [docs/extratreesclassifier.md](docs/extratreesclassifier.md) |
+
+Class weighting (`class_weight="balanced"`, `sample_weight`) needs nothing
+special: it is applied when scikit-learn fits the model and is already part of
+what the export carries.
 
 Each model's own documentation covers its usage, fidelity guarantees, tuning and
 benchmarks. Anything general — loading, embedding, static compilation, the export
@@ -97,8 +102,9 @@ import "your/module/models"
 proba, _ := models.Model.PredictProba(X) // models.Model is a package-level var
 ```
 
-The runnable [`examples/classify`](examples/classify) loads a statically
-compiled model and predicts.
+The runnable [`examples/classify`](examples/classify) loads two statically
+compiled models — a random forest and a balanced extra-trees model — and
+predicts with both through the same interface.
 
 ## Exporting a model
 
@@ -164,7 +170,7 @@ go run golang.org/x/tools/cmd/godoc@latest -http=:6060    # browser, like pkg.go
 | --- | --- |
 | `.` (`goml`) | Interfaces (`Model`, `Classifier`, `Regressor`), the type registry, and the `Load*` entry points. |
 | `tree/` | Decision-tree primitive: scikit-learn-exact traversal (`float32` cast, `NaN` routing). |
-| `ensemble/` | Tree-ensemble models (e.g. `RandomForestClassifier`). |
+| `ensemble/` | Tree-ensemble models (`RandomForestClassifier`, `ExtraTreesClassifier`) over one shared prediction path. |
 | `cmd/go-ml-gen/` | Generates Go source from an export (static compilation). |
 | `cmd/go-ml-bench/` | Benchmarks prediction for any model file. |
 | `tools/sklexport/` | Python exporter, model trainer, and test-fixture generator. |
@@ -182,8 +188,9 @@ make regen    # retrain models + rebuild fixtures and generated code (needs the 
 ```
 
 The models and fixtures under `testdata/` are trained from scratch on scikit-learn's
-Iris dataset and a synthetic `make_classification` dataset — no external data — so
-the corpus is fully self-contained and reproducible with `make regen`.
+Iris dataset and synthetic `make_classification` datasets, one of them deliberately
+imbalanced — no external data — so the corpus is fully self-contained and
+reproducible with `make regen`.
 
 ## License
 

@@ -14,7 +14,9 @@
 //   - Generic. Models are values behind small interfaces ([Model], [Classifier],
 //     [Regressor]). New estimator types register a decoder with [Register] and
 //     are then usable through the same [Load] entry point, mirroring how
-//     image.RegisterFormat or database/sql drivers work.
+//     image.RegisterFormat or database/sql drivers work. The models that ship
+//     today are RandomForestClassifier and ExtraTreesClassifier, both in
+//     package github.com/heru-public/go-ml/ensemble.
 //   - Faithful. Each model reproduces scikit-learn's prediction path exactly,
 //     down to its internal float32 cast and missing-value handling, so Go and
 //     Python agree to within floating-point rounding.
@@ -26,7 +28,7 @@
 //
 //	import (
 //		goml "github.com/heru-public/go-ml"
-//		_ "github.com/heru-public/go-ml/ensemble" // registers RandomForestClassifier
+//		_ "github.com/heru-public/go-ml/ensemble" // registers the forest models
 //	)
 //
 //	clf, err := goml.LoadClassifierFile("model.json")

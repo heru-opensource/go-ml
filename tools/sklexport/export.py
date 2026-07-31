@@ -108,7 +108,18 @@ def _export_tree(tree) -> dict:
 
 
 @register("RandomForestClassifier")
-def _export_random_forest(est) -> dict:
+@register("ExtraTreesClassifier")
+def _export_forest(est) -> dict:
+    """Serialize a tree-ensemble classifier: a forest of fitted trees.
+
+    RandomForestClassifier and ExtraTreesClassifier share this exporter. They
+    grow their trees differently (optimal vs. random split thresholds, bootstrap
+    samples vs. the whole training set), but once fitted they predict
+    identically -- by averaging the per-tree leaf distributions -- so the same
+    payload serves both. Sample weighting, including
+    ``class_weight="balanced"``, is likewise a training-time concern: it is
+    already folded into the leaf ``value`` vectors written out here.
+    """
     if getattr(est, "n_outputs_", 1) != 1:
         raise ValueError("only single-output forests are supported")
     classes = np.asarray(est.classes_, dtype=np.float64).tolist()

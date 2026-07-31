@@ -125,12 +125,12 @@ func generate(in, outPath, pkg, varName string) error {
 	var body bytes.Buffer
 	usesMath := false
 	switch env.Type {
-	case "RandomForestClassifier":
+	case "RandomForestClassifier", "ExtraTreesClassifier":
 		var f forestJSON
 		if err := json.Unmarshal(env.Model, &f); err != nil {
 			return fmt.Errorf("parsing model: %w", err)
 		}
-		usesMath = emitRandomForest(&body, varName, &f)
+		usesMath = emitForest(&body, varName, env.Type, &f)
 	default:
 		return fmt.Errorf("unsupported model type %q", env.Type)
 	}
@@ -161,14 +161,16 @@ func generate(in, outPath, pkg, varName string) error {
 	return os.WriteFile(outPath, formatted, 0o644)
 }
 
-// emitRandomForest writes the var + builder for a forest and reports whether it
-// referenced the math package (for non-finite literals).
-func emitRandomForest(w *bytes.Buffer, varName string, f *forestJSON) bool {
+// emitForest writes the var + builder for a tree ensemble of the given
+// estimator type and reports whether it referenced the math package (for
+// non-finite literals). The scikit-learn estimator name is also the name of the
+// Go type and of its constructor's suffix, so it is used verbatim.
+func emitForest(w *bytes.Buffer, varName, typeName string, f *forestJSON) bool {
 	var fw floatWriter
-	fmt.Fprintf(w, "// %s is the statically compiled RandomForestClassifier\n", varName)
+	fmt.Fprintf(w, "// %s is the statically compiled %s\n", varName, typeName)
 	fmt.Fprintf(w, "// (%d trees, %d features, %d classes).\n", len(f.Trees), f.NFeatures, len(f.Classes))
 	fmt.Fprintf(w, "var %s = build%s()\n\n", varName, varName)
-	fmt.Fprintf(w, "func build%s() *ensemble.RandomForestClassifier {\n", varName)
+	fmt.Fprintf(w, "func build%s() *ensemble.%s {\n", varName, typeName)
 
 	fmt.Fprintf(w, "\ttrees := []*tree.Tree{\n")
 	for i := range f.Trees {
@@ -191,7 +193,7 @@ func emitRandomForest(w *bytes.Buffer, varName string, f *forestJSON) bool {
 	w.WriteString("\tclasses := []float64{")
 	fw.writeFloats(w, f.Classes)
 	w.WriteString("}\n")
-	fmt.Fprintf(w, "\tm, err := ensemble.NewRandomForestClassifier(%d, classes, trees)\n", f.NFeatures)
+	fmt.Fprintf(w, "\tm, err := ensemble.New%s(%d, classes, trees)\n", typeName, f.NFeatures)
 	w.WriteString("\tif err != nil {\n\t\tpanic(\"go-ml-gen: \" + err.Error())\n\t}\n")
 	w.WriteString("\treturn m\n}\n")
 	return fw.usedMath

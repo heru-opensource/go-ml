@@ -31,9 +31,21 @@ python train_examples.py --models-dir ../../testdata/models --fixtures-dir ../..
 (Run from this directory, or add it to `PYTHONPATH`; `make_fixtures.py` and
 `train_examples.py` import `export`.)
 
+## Supported estimators
+
+| scikit-learn estimator | Notes |
+| --- | --- |
+| `RandomForestClassifier` | Single-output only (`n_outputs_ == 1`). |
+| `ExtraTreesClassifier` | Same payload as a random forest — the two are fitted differently but predict identically. |
+
+Sample weighting, including `class_weight="balanced"`, needs no special
+handling: scikit-learn applies it while fitting, so it is already part of the
+leaf distributions that get exported.
+
 ## The `go-ml/v1` format
 
-A JSON envelope wraps a type-specific model object:
+A JSON envelope wraps a type-specific model object, with `type` naming the
+scikit-learn estimator class:
 
 ```json
 { "format": "go-ml/v1", "type": "RandomForestClassifier", "model": { ... } }
@@ -56,6 +68,9 @@ Register an exporter in `export.py`:
 def _export_your(est) -> dict:
     return { ... }   # the type-specific "model" object
 ```
+
+Stack the decorator when several estimators serialize the same way, as
+`RandomForestClassifier` and `ExtraTreesClassifier` do.
 
 Then implement the matching decoder on the Go side and register it with
 `goml.Register("YourEstimator", ...)`.

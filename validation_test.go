@@ -24,8 +24,10 @@ type fixture struct {
 
 // models trained and exported by tools/sklexport/train_examples.py, each paired
 // with the scikit-learn reference fixture for the same estimator. iris is a
-// 3-class model; forest_bench is a larger binary model.
-var validationModels = []string{"iris", "forest_bench"}
+// 3-class random forest; forest_bench is a larger binary one;
+// extratrees_balanced is an ExtraTreesClassifier fitted with
+// class_weight="balanced" on an imbalanced 3-class set.
+var validationModels = []string{"iris", "forest_bench", "extratrees_balanced"}
 
 func rows(fs []jsonx.Floats) [][]float64 {
 	out := make([][]float64, len(fs))
@@ -36,8 +38,8 @@ func rows(fs []jsonx.Floats) [][]float64 {
 }
 
 // TestAgainstSklearn is the headline correctness test: it loads each exported
-// RandomForestClassifier and asserts that go-ml reproduces scikit-learn's
-// predict_proba and predict outputs.
+// model and asserts that go-ml reproduces scikit-learn's predict_proba and
+// predict outputs, for every estimator type the repo ships fixtures for.
 func TestAgainstSklearn(t *testing.T) {
 	// Tolerance is generous; in practice the batch path is bit-for-bit
 	// identical to scikit-learn's single-threaded summation, so observed
@@ -86,8 +88,8 @@ func TestAgainstSklearn(t *testing.T) {
 			if maxDiff > probaTol {
 				t.Errorf("predict_proba max abs diff %.3g exceeds tol %.3g", maxDiff, probaTol)
 			}
-			t.Logf("%s: %d samples, %d trees, predict_proba max abs diff = %.3g",
-				name, len(X), clf.(*ensemble.RandomForestClassifier).NTrees(), maxDiff)
+			t.Logf("%s: %s, %d samples, %d trees, predict_proba max abs diff = %.3g",
+				name, clf.Type(), len(X), clf.(ensemble.Forest).NTrees(), maxDiff)
 
 			pred, err := clf.Predict(X)
 			if err != nil {
@@ -105,43 +107,48 @@ func TestAgainstSklearn(t *testing.T) {
 
 // TestWorkerStrategiesAgree checks that the sequential, row-parallel and
 // tree-parallel accumulation paths all produce the same probabilities on the
-// real model, within floating-point rounding.
+// real models, within floating-point rounding. ensemble.LoadForest takes
+// whichever estimator the export holds, so the same check covers both types.
 func TestWorkerStrategiesAgree(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("testdata", "models", "forest_bench.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fx fixture
-	readJSON(t, filepath.Join("testdata", "fixtures", "forest_bench.fixture.json"), &fx)
-	X := rows(fx.X)
+	for _, name := range []string{"forest_bench", "extratrees_balanced"} {
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", "models", name+".json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fx fixture
+			readJSON(t, filepath.Join("testdata", "fixtures", name+".fixture.json"), &fx)
+			X := rows(fx.X)
 
-	seq, err := ensemble.LoadRandomForestClassifier(data, ensemble.WithWorkers(1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	base, _ := seq.PredictProba(X)
+			seq, err := ensemble.LoadForest(data, ensemble.WithWorkers(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			base, _ := seq.PredictProba(X)
 
-	for _, w := range []int{2, 4, 8} {
-		par, err := ensemble.LoadRandomForestClassifier(data, ensemble.WithWorkers(w))
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, _ := par.PredictProba(X)
-		var maxDiff float64
-		for i := range got {
-			for c := range got[i] {
-				if d := math.Abs(got[i][c] - base[i][c]); d > maxDiff {
-					maxDiff = d
+			for _, w := range []int{2, 4, 8} {
+				par, err := ensemble.LoadForest(data, ensemble.WithWorkers(w))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, _ := par.PredictProba(X)
+				var maxDiff float64
+				for i := range got {
+					for c := range got[i] {
+						if d := math.Abs(got[i][c] - base[i][c]); d > maxDiff {
+							maxDiff = d
+						}
+					}
+				}
+				if maxDiff > 1e-12 {
+					t.Errorf("workers=%d diverges from sequential by %.3g", w, maxDiff)
+				}
+				// Single-row prediction exercises the tree-parallel path.
+				if _, err := par.PredictProbaRow(X[0]); err != nil {
+					t.Errorf("workers=%d PredictProbaRow: %v", w, err)
 				}
 			}
-		}
-		if maxDiff > 1e-12 {
-			t.Errorf("workers=%d diverges from sequential by %.3g", w, maxDiff)
-		}
-		// Single-row prediction exercises the tree-parallel path.
-		if _, err := par.PredictProbaRow(X[0]); err != nil {
-			t.Errorf("workers=%d PredictProbaRow: %v", w, err)
-		}
+		})
 	}
 }
 

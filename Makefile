@@ -39,9 +39,11 @@ train:
 	PYTHONPATH=tools/sklexport $(PY) tools/sklexport/train_examples.py \
 		--models-dir $(MODELS_DIR) --fixtures-dir $(FIXTURES_DIR)
 
-# Compile the example model into Go source for examples/classify.
+# Compile the example models into Go source for examples/classify.
 gen: build
 	$(GO) run ./cmd/go-ml-gen -pkg models -var Iris -o $(GEN_DIR)/iris_gen.go $(MODELS_DIR)/iris.json
+	$(GO) run ./cmd/go-ml-gen -pkg models -var ExtraTreesBalanced \
+		-o $(GEN_DIR)/extratrees_balanced_gen.go $(MODELS_DIR)/extratrees_balanced.json
 
 doc:
 	$(GO) doc -all ./...

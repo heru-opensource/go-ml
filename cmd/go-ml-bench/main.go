@@ -36,16 +36,26 @@ func main() {
 	}
 	nf := clf.NFeatures()
 	ntrees := "?"
-	if rf, ok := clf.(*ensemble.RandomForestClassifier); ok {
-		ntrees = fmt.Sprintf("%d", rf.NTrees())
+	if f, ok := clf.(ensemble.Forest); ok {
+		ntrees = fmt.Sprintf("%d", f.NTrees())
 	}
 	fmt.Printf("model: %s (%s, %s trees, %d features)\n", *model, clf.Type(), ntrees, nf)
 	fmt.Printf("cpus:  %d\n", runtime.GOMAXPROCS(0))
 	fmt.Printf("load:  %s (parse + build from JSON)\n\n", fmtDur(loadTime))
 
-	// Reuse one model with parallelism and a copy forced sequential.
-	data, _ := os.ReadFile(*model)
-	seqRF, _ := ensemble.LoadRandomForestClassifier(data, ensemble.WithWorkers(1))
+	// Reuse one model with parallelism and a copy forced sequential. LoadForest
+	// takes whichever tree ensemble the file holds, so this tool times a
+	// RandomForestClassifier and an ExtraTreesClassifier alike.
+	data, err := os.ReadFile(*model)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read:", err)
+		os.Exit(1)
+	}
+	seq, err := ensemble.LoadForest(data, ensemble.WithWorkers(1))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load (sequential):", err)
+		os.Exit(1)
+	}
 
 	fmt.Printf("%-26s %12s %14s\n", "case", "per-op", "per-row")
 	fmt.Printf("%-26s %12s %14s\n", "----", "------", "-------")
@@ -53,13 +63,13 @@ func main() {
 	// Single sample (latency).
 	x := randRows(1, nf)
 	benchCase("1 row  (parallel)", *dur, 1, func() { sink(clf.PredictProba(x)) })
-	benchCase("1 row  (sequential)", *dur, 1, func() { sink(seqRF.PredictProba(x)) })
+	benchCase("1 row  (sequential)", *dur, 1, func() { sink(seq.PredictProba(x)) })
 
 	// Batches (throughput).
 	for _, n := range []int{256, 1000} {
 		X := randRows(n, nf)
 		benchCase(fmt.Sprintf("%d rows (parallel)", n), *dur, n, func() { sink(clf.PredictProba(X)) })
-		benchCase(fmt.Sprintf("%d rows (sequential)", n), *dur, n, func() { sink(seqRF.PredictProba(X)) })
+		benchCase(fmt.Sprintf("%d rows (sequential)", n), *dur, n, func() { sink(seq.PredictProba(X)) })
 	}
 }
 

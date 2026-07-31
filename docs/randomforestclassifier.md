@@ -6,6 +6,10 @@ prediction path. It is implemented in package
 [`ensemble`](../ensemble) and registers itself with the parent `goml` package so
 it can be loaded through `goml.Load`.
 
+[`ExtraTreesClassifier`](extratreesclassifier.md) shares this prediction path
+and, in go-ml, this implementation; everything below applies to it unchanged.
+`ensemble.LoadForest` loads either type from its export.
+
 ## Usage
 
 Through the generic interface:
