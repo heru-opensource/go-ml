@@ -7,6 +7,12 @@ breaking change to the public API requires a minor bump and an entry here.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-07-31
+
+Documentation and examples only: no change to any importable API, so upgrading
+from 0.1.0 is a no-op for compiled code. Tagged so the new godoc examples reach
+pkg.go.dev, which renders the latest released version.
+
 ### Added
 
 - **Two more runnable examples.** `examples/serve` is the service shape: the
@@ -76,5 +82,6 @@ been decided the other way:
   fit-time concern with no runtime surface, because scikit-learn has already
   folded it into the exported leaf distributions.
 
-[Unreleased]: https://github.com/heru-opensource/go-ml/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/heru-opensource/go-ml/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/heru-opensource/go-ml/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/heru-opensource/go-ml/releases/tag/v0.1.0
