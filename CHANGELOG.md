@@ -7,6 +7,16 @@ breaking change to the public API requires a minor bump and an entry here.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-04
+
+Three requests from a project using the library, all of them about the same
+thing: what belongs *inside* a model artifact rather than in hand-written Go
+beside it. Feature order, tuned thresholds, and the models that share a decision
+are all part of a fitted model, and every one of them drifts silently when it
+lives somewhere else.
+
+Requires Go 1.26 or newer, with no third-party dependencies.
+
 ### Added
 
 - **Feature names travel with the model.** `tools/sklexport` writes
@@ -132,6 +142,7 @@ been decided the other way:
   fit-time concern with no runtime surface, because scikit-learn has already
   folded it into the exported leaf distributions.
 
-[Unreleased]: https://github.com/heru-opensource/go-ml/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/heru-opensource/go-ml/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/heru-opensource/go-ml/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/heru-opensource/go-ml/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/heru-opensource/go-ml/releases/tag/v0.1.0
