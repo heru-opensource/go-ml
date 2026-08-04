@@ -61,6 +61,19 @@ func (fs *Floats) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Float decodes a single JSON number, or one of the string sentinels [Floats]
+// accepts, into a float64. It is the scalar counterpart of [Floats], used for
+// values that stand on their own rather than in an array.
+func Float(data []byte) (float64, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	tok, err := dec.Token()
+	if err != nil {
+		return 0, err
+	}
+	return tokenToFloat(tok)
+}
+
 func tokenToFloat(tok json.Token) (float64, error) {
 	switch v := tok.(type) {
 	case json.Number:

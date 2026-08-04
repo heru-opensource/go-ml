@@ -62,6 +62,34 @@ splits — are encoded as the JSON strings `"Infinity"`, `"-Infinity"`, `"NaN"`,
 because standard JSON cannot represent them and Go's decoder rejects the bare
 tokens Python emits.
 
+## Bundles: several estimators as one artifact
+
+`export_bundle` writes a `go-ml/bundle-v1` document: named estimators plus
+arbitrary JSON metadata, in one file.
+
+```python
+from export import export_bundle
+doc = export_bundle({"screen": screen, "confirm": confirm},
+                    {"screen_confidence": 0.9, "tuned_for": "specificity"})
+```
+
+```sh
+python -m sklexport.export bundle.pkl --bundle --meta threshold=0.83 -o bundle.json
+```
+
+```json
+{
+  "format": "go-ml/bundle-v1",
+  "models":   { "screen": { "type": "RandomForestClassifier", "model": { ... } }, ... },
+  "metadata": { "screen_confidence": 0.9, "tuned_for": "specificity" }
+}
+```
+
+Each entry under `models` is exactly the `type`/`model` pair of a single-model
+envelope. The metadata exists because thresholds tuned alongside a model are part
+of it: the Go side reads them back typed and errors on a key that is not there,
+which is the failure the hand-written alternative cannot produce.
+
 ## Adding a new estimator type
 
 Register an exporter in `export.py`:

@@ -23,6 +23,19 @@ breaking change to the public API requires a minor bump and an entry here.
 - The `serve` example accepts name-keyed `"rows"` alongside positional
   `"samples"`, and the `batch` example matches the CSV header against the model's
   feature names, reordering columns rather than trusting their order.
+- **Bundles: several models plus tuned scalars as one artifact.** The
+  `go-ml/bundle-v1` format holds named estimators and arbitrary JSON metadata in
+  one document. `goml.Bundle` reads members with `Classifier`/`Model` and
+  metadata with `Float`, `Int`, `String`, `Bool` or `Meta`; a key that is not
+  there is an error (`ErrUnknownMeta`), never a zero. `export_bundle` writes it
+  from Python (`--bundle --meta k=v` on the command line), and `go-ml-gen`
+  compiles a whole bundle in, one builder per model with the metadata as raw JSON
+  literals. This is for thresholds that were tuned with a model and today live in
+  hand-written Go beside it: go-ml carries them and hands them back typed, and
+  deliberately does not interpret them.
+- A fourth runnable example, `examples/bundle`: a two-stage cascade — a cheap
+  screen, a slower confirm model, and the two thresholds that decide between
+  them — shipped and compiled in as one artifact.
 
 ### Changed
 

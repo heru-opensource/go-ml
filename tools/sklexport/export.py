@@ -24,6 +24,8 @@ Usage::
     python -m sklexport.export model.pkl -o model.json              # one estimator
     python -m sklexport.export bundle.pkl --key clf -o clf.json     # one dict entry
     python -m sklexport.export bundle.pkl --all-keys -o outdir/      # whole dict
+    python -m sklexport.export bundle.pkl --bundle --meta threshold=0.83 \\
+        -o bundle.json                                               # one artifact
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ import warnings
 import numpy as np
 
 FORMAT = "go-ml/v1"
+BUNDLE_FORMAT = "go-ml/bundle-v1"
 
 # Registry: estimator class name -> exporter callable(estimator) -> dict.
 _EXPORTERS: dict[str, callable] = {}
@@ -159,6 +162,37 @@ def export_estimator(est) -> dict:
     return {"format": FORMAT, "type": name, "model": _EXPORTERS[name](est)}
 
 
+def export_bundle(estimators: dict, metadata: dict | None = None) -> dict:
+    """Serialize several named estimators, plus scalar metadata, as one artifact.
+
+    A deployed model is often not one estimator: a decision may take two or
+    three of them and the thresholds they were tuned against. Those thresholds
+    are as much a fitted parameter as any split in a tree, and keeping them in
+    hand-written code beside the model is what goes stale -- the numbers and the
+    trees get updated by different hands, and nothing fails loudly when they
+    disagree. A bundle ships them as one versioned file.
+
+    ``metadata`` values may be any JSON-serializable value; go-ml stores them and
+    hands them back typed, and does not interpret them.
+    """
+    if not estimators:
+        raise ValueError("a bundle needs at least one estimator")
+    models = {}
+    for name, est in estimators.items():
+        cls = type(est).__name__
+        if cls not in _EXPORTERS:
+            raise ValueError(
+                f"unsupported estimator {cls!r} for bundle key {name!r}; "
+                f"supported: {sorted(_EXPORTERS)}"
+            )
+        models[name] = {"type": cls, "model": _EXPORTERS[cls](est)}
+    return {
+        "format": BUNDLE_FORMAT,
+        "models": models,
+        "metadata": dict(metadata or {}),
+    }
+
+
 def load_pickle(path: str):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -175,6 +209,24 @@ def _write_json(obj: dict, path: str) -> None:
     print(f"wrote {path} ({os.path.getsize(path):,} bytes)", file=sys.stderr)
 
 
+def _parse_meta(pairs: list) -> dict:
+    """Parse KEY=VALUE metadata arguments, VALUE being JSON where it parses.
+
+    So ``--meta threshold=0.83`` stores a number and ``--meta stage=screen``
+    stores the string "screen", which is what either looks like it should mean.
+    """
+    meta = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep:
+            raise ValueError(f"--meta {pair!r} is not KEY=VALUE")
+        try:
+            meta[key] = json.loads(value)
+        except json.JSONDecodeError:
+            meta[key] = value
+    return meta
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("pickle", help="path to the pickled model or bundle dict")
@@ -184,10 +236,38 @@ def main(argv=None) -> int:
         action="store_true",
         help="export every supported estimator in a dict bundle to <out>/<key>.json",
     )
+    p.add_argument(
+        "--bundle",
+        action="store_true",
+        help="write ONE go-ml/bundle-v1 file holding every supported estimator "
+             "in a dict bundle, plus any --meta values",
+    )
+    p.add_argument(
+        "--meta",
+        action="append",
+        default=[],
+        metavar="KEY=JSON",
+        help="metadata entry for --bundle, e.g. --meta threshold=0.83 "
+             "--meta note='\"tuned for specificity\"' (repeatable; the value is "
+             "parsed as JSON, falling back to a plain string)",
+    )
     p.add_argument("-o", "--out", required=True, help="output file (or dir for --all-keys)")
     args = p.parse_args(argv)
 
     obj = load_pickle(args.pickle)
+
+    if args.bundle:
+        if not isinstance(obj, dict):
+            print("--bundle requires a dict of {name: estimator}", file=sys.stderr)
+            return 2
+        estimators = {k: v for k, v in obj.items() if type(v).__name__ in _EXPORTERS}
+        if not estimators:
+            print("--bundle found no supported estimators in the pickle", file=sys.stderr)
+            return 2
+        _write_json(export_bundle(estimators, _parse_meta(args.meta)), args.out)
+        print(f"bundled {len(estimators)} model(s): {', '.join(sorted(estimators))}",
+              file=sys.stderr)
+        return 0
 
     if args.all_keys:
         if not isinstance(obj, dict):

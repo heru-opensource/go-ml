@@ -181,18 +181,46 @@ import "your/module/models"
 proba, _ := models.Model.PredictProba(X) // models.Model is a package-level var
 ```
 
-See [Examples](#examples) for runnable programs covering all three approaches.
+### Ship several models as one artifact
+
+A deployed model is often not one estimator: a decision may take two or three of
+them plus the thresholds they were tuned against. Those thresholds are as much a
+fitted parameter as any split in a tree, and hand-writing them in Go beside the
+model is what goes stale — the numbers and the trees get updated by different
+hands, and nothing fails loudly when they disagree. A **bundle** is one file
+holding all of it:
+
+```python
+# Python, once
+from sklexport.export import export_bundle
+doc = export_bundle({"screen": screen_clf, "confirm": confirm_clf},
+                    {"screen_confidence": 0.9, "confirm_positive": 0.6})
+```
+
+```go
+b, err := goml.LoadBundleFile("cascade.json") // or LoadBundleBytes, or compile it in
+screen, err := b.Classifier("screen")
+threshold, err := b.Float("screen_confidence") // missing key → error, never a zero
+```
+
+Metadata values are read back typed (`Float`, `Int`, `String`, `Bool`, or `Meta`
+into any type). go-ml carries them and hands them back; what a threshold *means*
+stays your logic. `go-ml-gen` compiles a bundle in exactly as it does a single
+model. See [`examples/bundle`](examples/bundle/main.go).
+
+See [Examples](#examples) for runnable programs covering each of these.
 
 ## Examples
 
 Runnable programs, each narrating its own output and exiting. Between them they
-cover the three ways a model reaches production — pick the one that matches your
+cover the ways a model reaches production — pick the one that matches your
 deployment:
 
 ```sh
 go run ./examples/classify   # compiled in as Go source (go-ml-gen)
 go run ./examples/serve      # embedded JSON (//go:embed), served over HTTP
 go run ./examples/batch      # loaded from a file, scoring a CSV in bulk
+go run ./examples/bundle     # several models + tuned thresholds as one artifact
 ```
 
 - [`examples/classify`](examples/classify/main.go) — two statically compiled
@@ -209,6 +237,12 @@ go run ./examples/batch      # loaded from a file, scoring a CSV in bulk
   the whole file passed to a single `PredictProba` call so the rows can be spread
   across goroutines. Takes `-model`, `-csv` and `-workers`, so it doubles as a
   scoring tool for your own export.
+
+- [`examples/bundle`](examples/bundle/main.go) — one artifact holding two
+  estimators and the thresholds that make them a cascade: a cheap screen, and a
+  slower confirm model consulted only when the screen is unsure. Every tuned
+  number is read from the bundle at startup, so a missing one stops the program
+  instead of silently reading as zero.
 
 The API documentation carries
 [runnable godoc examples](https://pkg.go.dev/github.com/heru-opensource/go-ml#pkg-examples)
@@ -406,7 +440,7 @@ go run golang.org/x/tools/cmd/godoc@latest -http=:6060    # browser, like pkg.go
 | `tools/sklexport/` | Python exporter, model trainer, and test-fixture generator. |
 | `benchmark/` | Standalone scikit-learn benchmark harness (its own venv). |
 | `docs/` | Per-model documentation. |
-| `examples/` | Runnable examples: static compilation, an HTTP service, CSV batch scoring. |
+| `examples/` | Runnable examples: static compilation, an HTTP service, CSV batch scoring, a model bundle. |
 | `internal/jsonx/` | Tolerant float decoding (handles `±Inf`/`NaN` sentinels). |
 | `testdata/` | Exported models and scikit-learn reference outputs used by the tests. |
 

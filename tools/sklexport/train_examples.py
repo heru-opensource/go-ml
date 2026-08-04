@@ -14,6 +14,10 @@ Models produced:
                               ``feature_names``.
   * ``forest_bench``        - RandomForestClassifier, 30 features, 2 classes;
                               larger, for performance tests.
+  * ``iris_bundle``         - a go-ml/bundle-v1 artifact: two Iris estimators
+                              (a cheap screen and a slower confirm) plus the
+                              thresholds that make them a cascade, so the
+                              multi-estimator format is exercised end to end.
   * ``extratrees_balanced`` - ExtraTreesClassifier fitted with
                               ``class_weight="balanced"`` on a deliberately
                               imbalanced 3-class set, so the balanced
@@ -40,7 +44,7 @@ import pandas as pd
 from sklearn.datasets import load_iris, make_classification
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 
-from export import export_estimator
+from export import export_bundle, export_estimator
 from make_fixtures import _san, make_fixture
 
 # Shared forest_bench spec (keep in sync with benchmark/bench_sklearn.py).
@@ -119,6 +123,33 @@ def train(estimator, X, y, seed, feature_names=None, **params):
     return clf
 
 
+# iris_bundle spec: a two-stage cascade over the Iris data. The screen is cheap
+# and shallow; anything it is not confident about goes to the slower confirm
+# model. The two thresholds are the point of the bundle -- they are tuned
+# numbers, as much a part of the artifact as the trees, and the alternative is
+# for them to live in hand-written code that quietly drifts from the model.
+BUNDLE_SCREEN_TREES = 15
+BUNDLE_SCREEN_DEPTH = 3
+BUNDLE_CONFIRM_TREES = 25
+BUNDLE_CONFIRM_DEPTH = 6
+BUNDLE_METADATA = {
+    "screen_confidence": 0.9,   # below this, ask the confirm model
+    "confirm_positive": 0.6,    # confirm's probability needed to call it positive
+    "positive_class": 2.0,      # virginica
+    "tuned_for": "specificity",
+}
+
+
+def build_bundle(X, y):
+    screen = train(RandomForestClassifier, X, y, seed=0,
+                   n_estimators=BUNDLE_SCREEN_TREES, max_depth=BUNDLE_SCREEN_DEPTH,
+                   feature_names=IRIS_FEATURES)
+    confirm = train(ExtraTreesClassifier, X, y, seed=1,
+                    n_estimators=BUNDLE_CONFIRM_TREES, max_depth=BUNDLE_CONFIRM_DEPTH,
+                    feature_names=IRIS_FEATURES)
+    return export_bundle({"screen": screen, "confirm": confirm}, BUNDLE_METADATA)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--models-dir", default="testdata/models")
@@ -154,6 +185,12 @@ def main(argv=None):
             json.dump(_san(make_fixture(clf, seed=1000 + i)), f,
                       separators=(",", ":"), allow_nan=False)
         print(f"wrote {fpath} ({os.path.getsize(fpath):,} bytes)", file=sys.stderr)
+
+    bpath = os.path.join(args.models_dir, "iris_bundle.json")
+    with open(bpath, "w") as f:
+        json.dump(build_bundle(iX, iy), f, separators=(",", ":"), allow_nan=False)
+    print(f"wrote {bpath} ({os.path.getsize(bpath):,} bytes, bundle of 2 models "
+          f"+ {len(BUNDLE_METADATA)} metadata keys)", file=sys.stderr)
 
     return 0
 

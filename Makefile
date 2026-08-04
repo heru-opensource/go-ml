@@ -11,6 +11,7 @@ PY  ?= .venv/bin/python
 MODELS_DIR   := testdata/models
 FIXTURES_DIR := testdata/fixtures
 GEN_DIR      := examples/classify/models
+BUNDLE_GEN_DIR := examples/bundle/models
 
 .PHONY: all build test race lint vet fmt bench regen train gen examples doc clean
 
@@ -55,11 +56,13 @@ gen: build
 	$(GO) run ./cmd/go-ml-gen -pkg models -var Iris -o $(GEN_DIR)/iris_gen.go $(MODELS_DIR)/iris.json
 	$(GO) run ./cmd/go-ml-gen -pkg models -var ExtraTreesBalanced \
 		-o $(GEN_DIR)/extratrees_balanced_gen.go $(MODELS_DIR)/extratrees_balanced.json
+	$(GO) run ./cmd/go-ml-gen -pkg models -var IrisCascade \
+		-o $(BUNDLE_GEN_DIR)/iris_bundle_gen.go $(MODELS_DIR)/iris_bundle.json
 	cp $(MODELS_DIR)/iris.json examples/serve/iris.json
 
 # Run every example program, as CI does.
 examples:
-	@for dir in classify serve batch; do \
+	@for dir in classify serve batch bundle; do \
 		echo "===== examples/$$dir ====="; \
 		$(GO) run ./examples/$$dir || exit 1; \
 	done

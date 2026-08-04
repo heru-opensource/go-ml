@@ -90,18 +90,27 @@ func LoadBytes(data []byte) (Model, error) {
 		return nil, fmt.Errorf("goml: parsing export envelope: %w", err)
 	}
 	if env.Format != Format {
+		if env.Format == BundleFormat {
+			return nil, fmt.Errorf("%w: %q holds several models — use LoadBundle", ErrFormat, env.Format)
+		}
 		return nil, fmt.Errorf("%w: %q (this build understands %q)", ErrFormat, env.Format, Format)
 	}
+	return decodeModel(env.Type, env.Model)
+}
+
+// decodeModel dispatches one type-specific model object to its registered
+// decoder. Both the single-model envelope and each entry of a bundle land here.
+func decodeModel(typeName string, raw json.RawMessage) (Model, error) {
 	registryMu.RLock()
-	dec, ok := registry[env.Type]
+	dec, ok := registry[typeName]
 	registryMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("%w: %q (did you import the package that registers it? known: %v)",
-			ErrUnknownType, env.Type, RegisteredTypes())
+			ErrUnknownType, typeName, RegisteredTypes())
 	}
-	m, err := dec(env.Model)
+	m, err := dec(raw)
 	if err != nil {
-		return nil, fmt.Errorf("goml: decoding %s: %w", env.Type, err)
+		return nil, fmt.Errorf("goml: decoding %s: %w", typeName, err)
 	}
 	return m, nil
 }

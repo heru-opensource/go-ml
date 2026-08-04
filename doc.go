@@ -59,6 +59,20 @@
 // Tree models handle missing values natively. Pass math.NaN for an absent
 // feature; it is routed exactly as scikit-learn would route it.
 //
+// # Bundles
+//
+// A deployed model is often not one estimator: a decision may take two or three
+// of them plus the thresholds they were tuned against, and those thresholds are
+// as much a fitted parameter as any split in a tree. [LoadBundle] reads a
+// go-ml/bundle-v1 document holding all of it, [Bundle.Classifier] returns a
+// member by name, and the metadata accessors return the tuned values typed:
+//
+//	b, err := goml.LoadBundleFile("cascade.json")
+//	screen, err := b.Classifier("screen")
+//	threshold, err := b.Float("screen_confidence") // missing key: an error, not a zero
+//
+// go-ml carries metadata and hands it back; it does not interpret it.
+//
 // # Feature names
 //
 // The order of a feature vector is part of a model, and a vector assembled in

@@ -142,6 +142,43 @@ func Example_missingFeatures() {
 	// [0.0 1.0]
 }
 
+// ExampleLoadBundleBytes loads several models shipped as one artifact, together
+// with the scalars tuned alongside them.
+//
+// A deployed model is often not one estimator: a decision may take two of them
+// plus the thresholds they were tuned against, and those thresholds are as much
+// a fitted parameter as any split in a tree. Keeping them in hand-written code
+// beside the model is what goes stale — so a bundle carries them, and a key that
+// is not there is an error rather than a zero.
+func ExampleLoadBundleBytes() {
+	b, err := goml.LoadBundleBytes([]byte(miniBundle))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("models:  ", b.Names())
+	fmt.Println("metadata:", b.MetaKeys())
+
+	screen, err := b.Classifier("screen")
+	if err != nil {
+		log.Fatal(err)
+	}
+	threshold, err := b.Float("threshold")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	proba, _ := screen.PredictProba([][]float64{{0.9}})
+	fmt.Printf("p=%.2f >= %.2f: %v\n", proba[0][1], threshold, proba[0][1] >= threshold)
+
+	_, err = b.Float("threshold_v2")
+	fmt.Println("missing key is an error:", errors.Is(err, goml.ErrUnknownMeta))
+	// Output:
+	// models:   [confirm screen]
+	// metadata: [cutoffs enabled max_stages threshold tuned_for unbounded]
+	// p=1.00 >= 0.83: true
+	// missing key is an error: true
+}
+
 // Example_errors shows the two failures worth handling explicitly. Both are
 // sentinel errors, so test them with errors.Is rather than by string.
 func Example_errors() {
