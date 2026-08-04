@@ -17,6 +17,24 @@
 //
 // The variable name then defaults to the CamelCase of each file's base name.
 // Generated files carry a "DO NOT EDIT" banner and are gofmt-clean.
+//
+// A bundle export (go-ml/bundle-v1) is compiled in the same way, producing a
+// *goml.Bundle with one builder per model and the tuned metadata as literals.
+//
+// # Models that do not exist yet
+//
+// Every generated file also defines <Var>Available() bool, reporting true. The
+// -stub flag emits a placeholder declaring exactly the same names, with a nil
+// var and Available() reporting false:
+//
+//	go-ml-gen -stub -pkg models -var Model -o models/model_gen.go
+//	go-ml-gen -stub -type Bundle -pkg models -var Cascade -o models/cascade_gen.go
+//
+// A package that consumes a model can then compile before anyone has trained
+// one — during bootstrapping, in a fork that does not ship the artifact, in CI
+// on a machine without it — without hand-writing a nil var of its own. Guard use
+// with Available(), commit the placeholder, and regenerate over it from a real
+// export when there is one; no call site changes and no build tags are involved.
 package main
 
 import (
@@ -40,9 +58,24 @@ func main() {
 	pkg := flag.String("pkg", "models", "package name for generated files")
 	varName := flag.String("var", "", "exported variable name (single input only; default: CamelCase of file base)")
 	out := flag.String("o", "", "output file (single input) or directory (multiple inputs); default: <input>_gen.go")
+	stub := flag.Bool("stub", false, "emit a placeholder for a model that is not available yet, "+
+		"declaring the same names as real generated code (takes no input; needs -var and -o)")
+	stubType := flag.String("type", typeRandomForest, "concrete type for -stub: "+
+		typeRandomForest+", "+typeExtraTrees+" or "+typeBundle)
 	flag.Parse()
 
 	inputs := flag.Args()
+
+	if *stub {
+		if err := generateStub(*out, *pkg, *varName, *stubType, inputs); err != nil {
+			fmt.Fprintf(os.Stderr, "go-ml-gen: %v\n", err)
+			os.Exit(2)
+		}
+		fmt.Fprintf(os.Stderr, "go-ml-gen: wrote %s (placeholder var %s.%s, %sAvailable() == false)\n",
+			*out, *pkg, *varName, *varName)
+		return
+	}
+
 	if len(inputs) == 0 {
 		fmt.Fprintln(os.Stderr, "go-ml-gen: no input exports given")
 		flag.Usage()
@@ -89,6 +122,10 @@ func isDir(p string) bool {
 const (
 	formatV1     = "go-ml/v1"
 	formatBundle = "go-ml/bundle-v1"
+
+	typeRandomForest = "RandomForestClassifier"
+	typeExtraTrees   = "ExtraTreesClassifier"
+	typeBundle       = "Bundle"
 )
 
 // envelope covers both documents: a single model carries type/model, a bundle
@@ -150,8 +187,107 @@ func generate(in, outPath, pkg, varName string) error {
 		return err2
 	}
 
+	emitAvailable(&body, varName)
+	return writeSource(outPath, pkg, "go-ml-gen from "+filepath.Base(in), &imports, &body)
+}
+
+// generateStub writes a placeholder for a model that does not exist yet.
+//
+// A package that consumes a generated model still has to compile before anyone
+// has trained one — during bootstrapping, in a fork that does not ship the
+// artifact, in CI on a machine without it. The usual answer is a hand-written
+// nil var, reinvented per caller. This emits that file instead, declaring
+// exactly the names real generated code declares, so nothing at the call site
+// changes when the model arrives: regenerate over this file from an export and
+// <Var>Available() starts returning true.
+func generateStub(outPath, pkg, varName, modelType string, inputs []string) error {
+	switch {
+	case len(inputs) > 0:
+		return fmt.Errorf("-stub takes no input exports (got %v); it exists for when there is no export yet", inputs)
+	case varName == "":
+		return fmt.Errorf("-stub needs -var to know what to declare")
+	case outPath == "":
+		return fmt.Errorf("-stub needs -o")
+	}
+
+	var imports importSet
+	var goType string
+	switch modelType {
+	case typeRandomForest, typeExtraTrees:
+		imports.ensemble = true
+		goType = "*ensemble." + modelType
+	case typeBundle:
+		imports.goml = true
+		goType = "*goml.Bundle"
+	default:
+		return fmt.Errorf("unsupported -type %q (want %s, %s or %s)",
+			modelType, typeRandomForest, typeExtraTrees, typeBundle)
+	}
+
+	var body bytes.Buffer
+	fmt.Fprintf(&body, "// %s is nil: no model export was available when this file was generated.\n//\n", varName)
+	fmt.Fprintf(&body, "// Real generated code declares the same names, so call sites compile either\n")
+	fmt.Fprintf(&body, "// way — but they must ask %sAvailable() first, because methods on a nil\n", varName)
+	fmt.Fprintf(&body, "// model panic. Regenerate over this file from an export to compile one in.\n")
+	fmt.Fprintf(&body, "var %s %s\n\n", varName, goType)
+	fmt.Fprintf(&body, "// %sAvailable reports whether %s was compiled from a model export.\n", varName, varName)
+	fmt.Fprintf(&body, "// It is false here and true in code generated from a real export.\n")
+	fmt.Fprintf(&body, "func %sAvailable() bool { return false }\n", varName)
+
+	return writeSource(outPath, pkg, "go-ml-gen (-stub)", &imports, &body)
+}
+
+// emitAvailable writes the companion of the stub's <Var>Available: the same
+// function, reporting true, so a caller's guard needs no build tags and no edit
+// when the model lands.
+func emitAvailable(w *bytes.Buffer, varName string) {
+	fmt.Fprintf(w, "\n// %sAvailable reports whether %s was compiled from a model export.\n", varName, varName)
+	fmt.Fprintf(w, "// It is true here; the -stub placeholder defines the same function returning\n")
+	fmt.Fprintf(w, "// false, so a caller can be written once for both.\n")
+	fmt.Fprintf(w, "func %sAvailable() bool { return true }\n", varName)
+}
+
+// importSet collects what the emitted code turned out to need. Generated files
+// import only that: "math" appears solely for non-finite literals, and
+// "encoding/json"/goml only for a bundle's metadata.
+type importSet struct {
+	math     bool // math.Inf / math.NaN literals
+	json     bool // json.RawMessage metadata values
+	goml     bool // goml.Bundle
+	ensemble bool // the model constructors
+	tree     bool // tree.Tree literals
+}
+
+func (s *importSet) render() string {
+	var b strings.Builder
+	b.WriteString("import (\n")
+	if s.json {
+		b.WriteString("\t\"encoding/json\"\n")
+	}
+	if s.math {
+		b.WriteString("\t\"math\"\n")
+	}
+	if s.json || s.math {
+		b.WriteString("\n")
+	}
+	if s.goml {
+		b.WriteString("\tgoml \"github.com/heru-opensource/go-ml\"\n")
+	}
+	if s.ensemble {
+		b.WriteString("\t\"github.com/heru-opensource/go-ml/ensemble\"\n")
+	}
+	if s.tree {
+		b.WriteString("\t\"github.com/heru-opensource/go-ml/tree\"\n")
+	}
+	b.WriteString(")\n\n")
+	return b.String()
+}
+
+// writeSource assembles the banner, package clause, imports and body into a
+// gofmt-clean file.
+func writeSource(outPath, pkg, generatedBy string, imports *importSet, body *bytes.Buffer) error {
 	var src bytes.Buffer
-	fmt.Fprintf(&src, "// Code generated by go-ml-gen from %s; DO NOT EDIT.\n\n", filepath.Base(in))
+	fmt.Fprintf(&src, "// Code generated by %s; DO NOT EDIT.\n\n", generatedBy)
 	fmt.Fprintf(&src, "package %s\n\n", pkg)
 	src.WriteString(imports.render())
 	src.Write(body.Bytes())
@@ -170,36 +306,6 @@ func generate(in, outPath, pkg, varName string) error {
 	return os.WriteFile(outPath, formatted, 0o644)
 }
 
-// importSet collects what the emitted code turned out to need. Generated files
-// import only that: "math" appears solely for non-finite literals, and
-// "encoding/json"/goml only for a bundle's metadata.
-type importSet struct {
-	math bool // math.Inf / math.NaN literals
-	json bool // json.RawMessage metadata values
-	goml bool // goml.Bundle
-}
-
-func (s *importSet) render() string {
-	var b strings.Builder
-	b.WriteString("import (\n")
-	if s.json {
-		b.WriteString("\t\"encoding/json\"\n")
-	}
-	if s.math {
-		b.WriteString("\t\"math\"\n")
-	}
-	if s.json || s.math {
-		b.WriteString("\n")
-	}
-	if s.goml {
-		b.WriteString("\tgoml \"github.com/heru-opensource/go-ml\"\n")
-	}
-	b.WriteString("\t\"github.com/heru-opensource/go-ml/ensemble\"\n")
-	b.WriteString("\t\"github.com/heru-opensource/go-ml/tree\"\n")
-	b.WriteString(")\n\n")
-	return b.String()
-}
-
 // emitSingle writes the var + builder for a one-model export.
 func emitSingle(w *bytes.Buffer, imports *importSet, varName string, env *envelope) error {
 	f, err := parseForest(env.Type, env.Model)
@@ -209,6 +315,7 @@ func emitSingle(w *bytes.Buffer, imports *importSet, varName string, env *envelo
 	fmt.Fprintf(w, "// %s is the statically compiled %s\n", varName, env.Type)
 	fmt.Fprintf(w, "// (%d trees, %d features, %d classes).\n", len(f.Trees), f.NFeatures, len(f.Classes))
 	fmt.Fprintf(w, "var %s = build%s()\n\n", varName, varName)
+	imports.ensemble, imports.tree = true, true
 	imports.math = emitForest(w, "build"+varName, env.Type, f) || imports.math
 	return nil
 }
@@ -221,7 +328,7 @@ func emitBundle(w *bytes.Buffer, imports *importSet, varName string, env *envelo
 	if len(env.Models) == 0 {
 		return fmt.Errorf("bundle has no models")
 	}
-	imports.goml = true
+	imports.goml, imports.ensemble, imports.tree = true, true, true
 
 	names := make([]string, 0, len(env.Models))
 	for name := range env.Models {

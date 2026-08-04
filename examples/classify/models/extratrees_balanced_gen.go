@@ -61,3 +61,8 @@ func buildExtraTreesBalanced() *ensemble.ExtraTreesClassifier {
 	}
 	return m
 }
+
+// ExtraTreesBalancedAvailable reports whether ExtraTreesBalanced was compiled from a model export.
+// It is true here; the -stub placeholder defines the same function returning
+// false, so a caller can be written once for both.
+func ExtraTreesBalancedAvailable() bool { return true }

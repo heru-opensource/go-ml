@@ -102,3 +102,8 @@ func buildIrisCascadeScreen() *ensemble.RandomForestClassifier {
 	}
 	return m
 }
+
+// IrisCascadeAvailable reports whether IrisCascade was compiled from a model export.
+// It is true here; the -stub placeholder defines the same function returning
+// false, so a caller can be written once for both.
+func IrisCascadeAvailable() bool { return true }

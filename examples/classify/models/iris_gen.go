@@ -124,3 +124,8 @@ func buildIris() *ensemble.RandomForestClassifier {
 	}
 	return m
 }
+
+// IrisAvailable reports whether Iris was compiled from a model export.
+// It is true here; the -stub placeholder defines the same function returning
+// false, so a caller can be written once for both.
+func IrisAvailable() bool { return true }

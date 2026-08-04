@@ -36,6 +36,16 @@ breaking change to the public API requires a minor bump and an entry here.
 - A fourth runnable example, `examples/bundle`: a two-stage cascade — a cheap
   screen, a slower confirm model, and the two thresholds that decide between
   them — shipped and compiled in as one artifact.
+- **A conventional "not compiled in" state.** Generated files now define
+  `<Var>Available() bool`, and `go-ml-gen -stub` emits a placeholder declaring
+  exactly the same names with a nil var and `Available()` reporting false. A
+  package that consumes a model compiles before one exists, without a
+  hand-written nil var per project; regenerating from a real export overwrites
+  the placeholder and changes nothing at the call sites. No build tags are
+  involved — one file either way, so there is only ever one configuration to
+  test.
+- `cmd/go-ml-gen` gained tests, covering both formats, the placeholder contract
+  and the rejections.
 
 ### Changed
 

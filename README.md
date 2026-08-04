@@ -181,6 +181,20 @@ import "your/module/models"
 proba, _ := models.Model.PredictProba(X) // models.Model is a package-level var
 ```
 
+Every generated file also defines `ModelAvailable() bool`. When there is no
+export yet — bootstrapping, a fork that does not ship the artifact, CI on a
+machine without it — generate a placeholder that declares the same names:
+
+```sh
+go run github.com/heru-opensource/go-ml/cmd/go-ml-gen \
+    -stub -pkg models -var Model -o models/model_gen.go
+```
+
+The var is nil and `ModelAvailable()` reports false, so the package compiles and
+callers guard on it. Regenerating from a real export overwrites the file, flips
+`Available` to true, and changes nothing at the call sites — no build tags, and
+no hand-written nil var per project.
+
 ### Ship several models as one artifact
 
 A deployed model is often not one estimator: a decision may take two or three of
