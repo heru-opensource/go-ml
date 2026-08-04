@@ -38,7 +38,8 @@ type Forest interface {
 type Option func(*options)
 
 type options struct {
-	workers int
+	workers      int
+	featureNames []string
 }
 
 // WithWorkers sets the maximum number of goroutines used per prediction call.
@@ -46,6 +47,15 @@ type options struct {
 // forces sequential prediction, which is bit-for-bit identical to scikit-learn.
 func WithWorkers(n int) Option {
 	return func(o *options) { o.workers = n }
+}
+
+// WithFeatureNames attaches input feature names, in the model's own column
+// order. It is how statically generated code carries scikit-learn's
+// feature_names_in_ (see cmd/go-ml-gen); an export that has them supplies them
+// on its own, and passing this to a loader overrides what the file said. The
+// count must match n_features.
+func WithFeatureNames(names []string) Option {
+	return func(o *options) { o.featureNames = names }
 }
 
 func applyOptions(opts []Option) options {
@@ -63,10 +73,11 @@ func applyOptions(opts []Option) options {
 //
 // A forest is safe for concurrent use by multiple goroutines.
 type forest struct {
-	nFeatures int
-	classes   []float64
-	trees     []*tree.Tree
-	workers   int // <=0 means GOMAXPROCS
+	nFeatures    int
+	classes      []float64
+	featureNames []string // nil when the export carried none
+	trees        []*tree.Tree
+	workers      int // <=0 means GOMAXPROCS
 }
 
 // newForest validates the parts of an ensemble and assembles them. classes are
@@ -91,16 +102,26 @@ func newForest(nFeatures int, classes []float64, trees []*tree.Tree, opts []Opti
 		}
 	}
 	o := applyOptions(opts)
+	if n := len(o.featureNames); n > 0 && n != nFeatures {
+		return forest{}, fmt.Errorf("ensemble: %d feature names for %d features", n, nFeatures)
+	}
 	return forest{
-		nFeatures: nFeatures,
-		classes:   append([]float64(nil), classes...),
-		trees:     trees,
-		workers:   o.workers,
+		nFeatures:    nFeatures,
+		classes:      append([]float64(nil), classes...),
+		featureNames: append([]string(nil), o.featureNames...),
+		trees:        trees,
+		workers:      o.workers,
 	}, nil
 }
 
 // NFeatures returns the number of input features each sample must have.
 func (f *forest) NFeatures() int { return f.nFeatures }
+
+// FeatureNames returns a copy of the input feature names in column order, or
+// nil when the export carried none. See [goml.Model] and [goml.Assembler].
+func (f *forest) FeatureNames() []string {
+	return append([]string(nil), f.featureNames...)
+}
 
 // NTrees returns the number of decision trees in the ensemble.
 func (f *forest) NTrees() int { return len(f.trees) }
@@ -270,6 +291,16 @@ func (f *forest) numWorkers() int {
 // it because a registered goml decoder takes no options.
 func (f *forest) setWorkers(n int) { f.workers = n }
 
+// setFeatureNames applies [WithFeatureNames] to an already-decoded model,
+// replacing whatever the export carried.
+func (f *forest) setFeatureNames(names []string) error {
+	if len(names) != f.nFeatures {
+		return fmt.Errorf("ensemble: %d feature names for %d features", len(names), f.nFeatures)
+	}
+	f.featureNames = append([]string(nil), names...)
+	return nil
+}
+
 func argmax(p []float64) int {
 	best, bi := p[0], 0
 	for i := 1; i < len(p); i++ {
@@ -284,10 +315,11 @@ func argmax(p []float64) int {
 
 // forestJSON is the "model" object of a go-ml/v1 export for either forest type.
 type forestJSON struct {
-	NFeatures int          `json:"n_features"`
-	NOutputs  int          `json:"n_outputs"`
-	Classes   jsonx.Floats `json:"classes"`
-	Trees     []tree.JSON  `json:"trees"`
+	NFeatures    int          `json:"n_features"`
+	NOutputs     int          `json:"n_outputs"`
+	Classes      jsonx.Floats `json:"classes"`
+	FeatureNames []string     `json:"feature_names"` // absent unless fitted on a named frame
+	Trees        []tree.JSON  `json:"trees"`
 }
 
 func decodeForest(raw json.RawMessage) (forest, error) {
@@ -306,7 +338,11 @@ func decodeForest(raw json.RawMessage) (forest, error) {
 		}
 		trees[i] = t
 	}
-	return newForest(j.NFeatures, []float64(j.Classes), trees, nil)
+	var opts []Option
+	if len(j.FeatureNames) > 0 {
+		opts = append(opts, WithFeatureNames(j.FeatureNames))
+	}
+	return newForest(j.NFeatures, []float64(j.Classes), trees, opts)
 }
 
 // LoadForest decodes whichever tree-ensemble classifier a go-ml/v1 export
@@ -324,14 +360,26 @@ func LoadForest(data []byte, opts ...Option) (Forest, error) {
 	if !ok {
 		return nil, fmt.Errorf("ensemble: export is a %s, not a tree-ensemble classifier", m.Type())
 	}
-	if o := applyOptions(opts); o.workers != 0 {
-		// Every Forest this package decodes embeds *forest and so is tunable;
-		// a Forest implemented elsewhere need not be.
-		tunable, ok := f.(interface{ setWorkers(int) })
-		if !ok {
-			return nil, fmt.Errorf("ensemble: %s does not support WithWorkers", f.Type())
-		}
+	o := applyOptions(opts)
+	if o.workers == 0 && o.featureNames == nil {
+		return f, nil
+	}
+	// Every Forest this package decodes embeds *forest and so is tunable; a
+	// Forest implemented elsewhere need not be.
+	tunable, ok := f.(interface {
+		setWorkers(int)
+		setFeatureNames([]string) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("ensemble: %s does not support these options", f.Type())
+	}
+	if o.workers != 0 {
 		tunable.setWorkers(o.workers)
+	}
+	if o.featureNames != nil {
+		if err := tunable.setFeatureNames(o.featureNames); err != nil {
+			return nil, err
+		}
 	}
 	return f, nil
 }

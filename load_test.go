@@ -73,6 +73,7 @@ type fakeRegressor struct{ name string }
 
 func (f fakeRegressor) Type() string                           { return f.name }
 func (fakeRegressor) NFeatures() int                           { return 1 }
+func (fakeRegressor) FeatureNames() []string                   { return nil }
 func (fakeRegressor) Predict(X [][]float64) ([]float64, error) { return make([]float64, len(X)), nil }
 
 func TestRegisterPanics(t *testing.T) {

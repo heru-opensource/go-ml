@@ -53,7 +53,10 @@ scikit-learn estimator class:
 
 A forest stores each tree as flat, parallel arrays mirroring scikit-learn's
 `sklearn.tree._tree.Tree` (`left`, `right`, `feature`, `threshold`,
-`missing_left`) plus a flattened, L1-normalized leaf `value` matrix. Non-finite
+`missing_left`) plus a flattened, L1-normalized leaf `value` matrix. When the estimator was fitted on a
+named frame, `feature_names` carries `feature_names_in_` in column order, so the
+Go side can build inputs by name instead of by position; it is simply absent for
+an estimator fitted on a bare array. Non-finite
 floats — notably the `±Inf` thresholds scikit-learn uses for pure missing-value
 splits — are encoded as the JSON strings `"Infinity"`, `"-Infinity"`, `"NaN"`,
 because standard JSON cannot represent them and Go's decoder rejects the bare

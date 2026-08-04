@@ -79,6 +79,50 @@ func ExampleLoadClassifierFile() {
 	// class 2  proba [0.000 0.003 0.998]
 }
 
+// ExampleNewAssembler builds inputs by name instead of by position.
+//
+// Feature order is part of a model, and a vector in the wrong order is made of
+// individually valid numbers — nothing downstream can catch it. When the export
+// carries names (scikit-learn records them for an estimator fitted on a named
+// frame), assembling by name makes that mistake impossible, and a retrain that
+// reorders columns changes the export rather than silently breaking callers.
+func ExampleNewAssembler() {
+	clf, err := goml.LoadClassifierFile("testdata/models/iris.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(clf.FeatureNames())
+
+	a, err := goml.NewAssembler(clf)
+	if err != nil {
+		log.Fatal(err) // the export carries no names
+	}
+
+	// Order here is deliberately not the model's, and petal_width is absent —
+	// an omitted feature is a missing one (NaN), which the trees route natively.
+	row, err := a.Row(map[string]float64{
+		"petal_length": 1.4,
+		"sepal_width":  3.5,
+		"sepal_length": 5.1,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(a.Missing(map[string]float64{"petal_length": 1.4, "sepal_width": 3.5, "sepal_length": 5.1}))
+
+	label, _ := clf.Predict([][]float64{row})
+	fmt.Printf("class %g\n", label[0])
+
+	// A name the model does not have is an error, not a silently dropped value.
+	_, err = a.Row(map[string]float64{"petal_len": 1.4})
+	fmt.Println(errors.Is(err, goml.ErrUnknownFeature))
+	// Output:
+	// [sepal_length sepal_width petal_length petal_width]
+	// [petal_width]
+	// class 0
+	// true
+}
+
 // Example_missingFeatures shows the missing-value convention: an absent feature
 // is math.NaN, and the trees route it the way scikit-learn learned to during
 // fitting rather than erroring or imputing. Here the root's missing direction

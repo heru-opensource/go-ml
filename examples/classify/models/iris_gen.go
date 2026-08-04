@@ -117,7 +117,8 @@ func buildIris() *ensemble.RandomForestClassifier {
 		{Left: []int32{1, 2, -1, -1, 5, 6, 7, 8, -1, -1, -1, -1, -1}, Right: []int32{4, 3, -1, -1, 12, 11, 10, 9, -1, -1, -1, -1, -1}, Feature: []int32{2, 3, -2, -2, 3, 0, 1, 0, -2, -2, -2, -2, -2}, Threshold: []float64{4.75, 0.75, -2, -2, 1.75, 7.049999952316284, 2.799999952316284, 6.200000047683716, -2, -2, -2, -2, -2}, MissingLeft: []bool{true, true, false, false, false, true, false, true, false, false, false, false, false}, Value: []float64{0.31333333333333335, 0.3333333333333333, 0.35333333333333333, 0.5053763440860215, 0.4946236559139785, 0, 1, 0, 0, 0, 1, 0, 0, 0.07017543859649122, 0.9298245614035088, 0, 0.5, 0.5, 0, 0.6666666666666666, 0.3333333333333333, 0, 0.3333333333333333, 0.6666666666666666, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1}, ValueWidth: 3},
 	}
 	classes := []float64{0, 1, 2}
-	m, err := ensemble.NewRandomForestClassifier(4, classes, trees)
+	names := []string{"sepal_length", "sepal_width", "petal_length", "petal_width"}
+	m, err := ensemble.NewRandomForestClassifier(4, classes, trees, ensemble.WithFeatureNames(names))
 	if err != nil {
 		panic("go-ml-gen: " + err.Error())
 	}

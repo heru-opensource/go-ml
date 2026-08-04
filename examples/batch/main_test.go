@@ -43,6 +43,47 @@ func TestReadCSVErrors(t *testing.T) {
 	}
 }
 
+// TestAlignReordersByName is the point of carrying feature names: a CSV whose
+// columns are in a different order than the model's must still score correctly.
+func TestAlignReordersByName(t *testing.T) {
+	names := []string{"a", "b", "c"}
+	header := []string{"c", "a", "b"}
+	X := [][]float64{{3, 1, 2}, {30, 10, 20}}
+
+	got, err := align(names, header, X)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]float64{{1, 2, 3}, {10, 20, 30}}
+	for i := range want {
+		for j := range want[i] {
+			if got[i][j] != want[i][j] {
+				t.Fatalf("row %d = %v, want %v", i, got[i], want[i])
+			}
+		}
+	}
+}
+
+func TestAlignRejectsAMissingColumn(t *testing.T) {
+	_, err := align([]string{"a", "b"}, []string{"a", "bb"}, [][]float64{{1, 2}})
+	if err == nil || !strings.Contains(err.Error(), "b") {
+		t.Errorf("err = %v, want it to name the missing column", err)
+	}
+}
+
+// TestAlignWithoutNamesTrustsPosition covers the older exports: with no names
+// there is nothing to match on, so the rows pass through untouched.
+func TestAlignWithoutNamesTrustsPosition(t *testing.T) {
+	X := [][]float64{{1, 2}}
+	got, err := align(nil, []string{"x", "y"}, X)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0][0] != 1 || got[0][1] != 2 {
+		t.Errorf("rows = %v, want them unchanged", got)
+	}
+}
+
 func TestWriteCSVRoundTripsMissingValues(t *testing.T) {
 	var out strings.Builder
 	err := writeCSV(&out,

@@ -4,10 +4,12 @@
 // serves one request at a time; here it is loaded from a file at startup and the
 // work arrives in bulk.
 //
-// Two things worth copying from it: an empty CSV field becomes math.NaN, which
-// the trees route natively instead of erroring or imputing; and the whole batch
-// goes through a single PredictProba call, which is what lets go-ml spread the
-// rows across goroutines.
+// Three things worth copying from it: an empty CSV field becomes math.NaN,
+// which the trees route natively instead of erroring or imputing; the whole
+// batch goes through a single PredictProba call, which is what lets go-ml spread
+// the rows across goroutines; and the CSV header is matched against the model's
+// own feature names, so a file whose columns are in a different order is
+// reordered rather than silently misread.
 //
 // Run it from the repository root:
 //
@@ -57,6 +59,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("batch: %v", err)
 	}
+	// The CSV's column order need not be the model's: when the export carries
+	// feature names, the header says which column is which.
+	X, err = align(clf.FeatureNames(), header, X)
+	if err != nil {
+		log.Fatalf("batch: %v", err)
+	}
+	if names := clf.FeatureNames(); len(names) > 0 {
+		header = names // the rows are in the model's order now, so the header is too
+	}
 
 	// One call for the whole file. Row-by-row would give identical numbers and
 	// waste the batching.
@@ -79,6 +90,54 @@ func main() {
 	fmt.Fprintf(os.Stderr, "\n%s: %d trees, %d features — scored %d rows in %s (%.0f rows/s)\n",
 		clf.Type(), clf.NTrees(), clf.NFeatures(), len(X), elapsed.Round(time.Microsecond),
 		float64(len(X))/elapsed.Seconds())
+}
+
+// align reorders each row from the CSV's column order into the model's.
+//
+// It is the whole reason feature names belong in the export. Without them
+// (names == nil) position is all there is, and the file simply has to be in the
+// model's order already — which is the failure mode this guards: every value is
+// individually valid, so a CSV written in a different order, or a model
+// retrained with reordered features, would score confidently against nonsense.
+//
+// The permutation is computed once for the file rather than per row. For input
+// that arrives keyed by name in the first place — a JSON request, say — reach
+// for goml.Assembler instead; see examples/serve.
+func align(names, header []string, X [][]float64) ([][]float64, error) {
+	if len(names) == 0 {
+		fmt.Fprintf(os.Stderr, "note: this export carries no feature names, "+
+			"so the CSV columns are trusted to be in the model's own order\n")
+		return X, nil
+	}
+
+	column := make(map[string]int, len(header))
+	for i, h := range header {
+		column[strings.TrimSpace(h)] = i
+	}
+	perm := make([]int, len(names))
+	var missing []string
+	for i, name := range names {
+		j, ok := column[name]
+		if !ok {
+			missing = append(missing, name)
+			continue
+		}
+		perm[i] = j
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("the CSV has no column for %s (model wants %s; file has %s)",
+			strings.Join(missing, ", "), strings.Join(names, ", "), strings.Join(header, ", "))
+	}
+
+	out := make([][]float64, len(X))
+	for i, row := range X {
+		aligned := make([]float64, len(names))
+		for c, j := range perm {
+			aligned[c] = row[j]
+		}
+		out[i] = aligned
+	}
+	return out, nil
 }
 
 func openInput(path string) io.Reader {

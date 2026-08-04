@@ -49,10 +49,58 @@ func mustLoad() goml.Classifier {
 	return c
 }
 
-// request is the wire format. JSON has no NaN, so a missing feature is null —
-// the same convention most callers end up with.
+// assembler builds feature vectors from name-keyed input, in the model's own
+// column order. It is nil when the export carries no feature names, in which
+// case callers have to send positional samples.
+var assembler = newAssembler()
+
+func newAssembler() *goml.Assembler {
+	a, err := goml.NewAssembler(clf)
+	if errors.Is(err, goml.ErrNoFeatureNames) {
+		return nil
+	}
+	if err != nil {
+		log.Fatalf("serve: %v", err)
+	}
+	return a
+}
+
+// request is the wire format, and it accepts both shapes a caller might have.
+//
+// "samples" is positional: the order is the model's, and getting it wrong is
+// undetectable because every value is individually valid. "rows" is keyed by
+// feature name, which is the shape to prefer — the server puts the values in
+// the right columns, and an unrecognised name is an error rather than a
+// silently misplaced number.
+//
+// JSON has no NaN either way, so a missing feature is null in "samples" and
+// simply an absent key in "rows".
 type request struct {
-	Samples [][]*float64 `json:"samples"`
+	Samples [][]*float64         `json:"samples"`
+	Rows    []map[string]float64 `json:"rows"`
+}
+
+// featureVectors turns whichever shape arrived into the model's input matrix.
+func (r *request) featureVectors() ([][]float64, error) {
+	if len(r.Rows) > 0 {
+		if assembler == nil {
+			return nil, fmt.Errorf("this model carries no feature names, so send positional \"samples\"")
+		}
+		return assembler.Rows(r.Rows)
+	}
+
+	X := make([][]float64, len(r.Samples))
+	for i, sample := range r.Samples {
+		X[i] = make([]float64, len(sample))
+		for j, v := range sample {
+			if v == nil {
+				X[i][j] = math.NaN() // absent feature, routed natively by the trees
+				continue
+			}
+			X[i][j] = *v
+		}
+	}
+	return X, nil
 }
 
 type response struct {
@@ -69,16 +117,11 @@ func handlePredict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	X := make([][]float64, len(req.Samples))
-	for i, sample := range req.Samples {
-		X[i] = make([]float64, len(sample))
-		for j, v := range sample {
-			if v == nil {
-				X[i][j] = math.NaN() // absent feature, routed natively by the trees
-				continue
-			}
-			X[i][j] = *v
-		}
+	X, err := req.featureVectors()
+	if err != nil {
+		// An unknown feature name is the caller's mistake, like a wrong count.
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	proba, err := clf.PredictProba(X)
@@ -132,6 +175,7 @@ func main() {
 	url := "http://" + ln.Addr().String() + "/predict"
 	fmt.Printf("%s embedded (%d KiB of JSON), %d features, classes %v\n",
 		clf.Type(), len(modelJSON)/1024, clf.NFeatures(), clf.Classes())
+	fmt.Printf("features: %v\n", clf.FeatureNames())
 	fmt.Printf("listening on %s\n\n", ln.Addr())
 
 	// 1. An ordinary batch: a typical setosa and a typical virginica.
@@ -143,7 +187,14 @@ func main() {
 	// 3. A malformed request: three features where the model wants four.
 	show(url, `{"samples": [[5.9, 3.0, 1.8]]}`)
 
-	// 4. Concurrent traffic against the one shared model.
+	// 4. The same first sample sent by name, in a deliberately different order.
+	//    Identical prediction, and no way to get the order wrong.
+	show(url, `{"rows": [{"petal_width": 0.2, "sepal_length": 5.1, "petal_length": 1.4, "sepal_width": 3.5}]}`)
+
+	// 5. A misspelled feature name: caught, where a misplaced value could not be.
+	show(url, `{"rows": [{"petal_len": 1.4, "sepal_length": 5.1}]}`)
+
+	// 6. Concurrent traffic against the one shared model.
 	concurrent(url, 8, `{"samples": [[6.7, 3.0, 5.2, 2.3]]}`)
 }
 

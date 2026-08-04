@@ -102,6 +102,23 @@ Reading the numbers:
 * **Goroutines add ~6–11× on top** for batches on this machine (256 rows:
   20.5 → 3.2 µs/row; 1000 rows: 20.4 → 1.8 µs/row).
 
+## Feature names
+
+If the estimator was fitted on a named frame, scikit-learn recorded
+`feature_names_in_` and the export carries it, in column order:
+
+```go
+fmt.Println(clf.FeatureNames())      // nil when the export has none
+a, _ := goml.NewAssembler(clf)       // build inputs by name instead of position
+row, err := a.Row(map[string]float64{"petal_length": 1.4, "sepal_width": 3.5})
+```
+
+Order is part of the model, and a vector built in the wrong order is made of
+individually valid numbers — no validation can catch it. Names move that
+contract into the artifact, so a retrain that reorders or renames features
+updates the export rather than silently breaking callers. `ensemble.WithFeatureNames`
+attaches them when constructing a model by hand, which is what `go-ml-gen` emits.
+
 ## Export format
 
 A forest is exported by [`tools/sklexport`](../tools/sklexport) as a `go-ml/v1`
@@ -110,6 +127,7 @@ envelope whose `model` object is:
 ```json
 {
   "n_features": 30, "n_outputs": 1, "classes": [0, 1],
+  "feature_names": ["age", "pressure", …],
   "trees": [ { "node_count": …, "value_width": 2,
                "left": [...], "right": [...], "feature": [...],
                "threshold": [...], "missing_left": [...], "value": [...] }, … ]

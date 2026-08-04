@@ -133,6 +133,23 @@ Time your own model with the same harness:
 go run ./cmd/go-ml-bench -model testdata/models/extratrees_balanced.json
 ```
 
+## Feature names
+
+If the estimator was fitted on a named frame, scikit-learn recorded
+`feature_names_in_` and the export carries it, in column order:
+
+```go
+fmt.Println(clf.FeatureNames())      // nil when the export has none
+a, _ := goml.NewAssembler(clf)       // build inputs by name instead of position
+row, err := a.Row(map[string]float64{"petal_length": 1.4, "sepal_width": 3.5})
+```
+
+Order is part of the model, and a vector built in the wrong order is made of
+individually valid numbers — no validation can catch it. Names move that
+contract into the artifact, so a retrain that reorders or renames features
+updates the export rather than silently breaking callers. `ensemble.WithFeatureNames`
+attaches them when constructing a model by hand, which is what `go-ml-gen` emits.
+
 ## Export format
 
 An extra-trees ensemble is exported by [`tools/sklexport`](../tools/sklexport)
@@ -146,6 +163,7 @@ naming the estimator:
   "type": "ExtraTreesClassifier",
   "model": {
     "n_features": 10, "n_outputs": 1, "classes": [0, 1, 2],
+    "feature_names": ["age", "pressure", …],
     "trees": [ { "node_count": …, "value_width": 3,
                  "left": [...], "right": [...], "feature": [...],
                  "threshold": [...], "missing_left": [...], "value": [...] }, … ]

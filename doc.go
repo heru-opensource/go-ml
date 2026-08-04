@@ -58,4 +58,20 @@
 //
 // Tree models handle missing values natively. Pass math.NaN for an absent
 // feature; it is routed exactly as scikit-learn would route it.
+//
+// # Feature names
+//
+// The order of a feature vector is part of a model, and a vector assembled in
+// the wrong order is made of individually valid numbers — no validation can
+// catch it. When scikit-learn recorded feature_names_in_ (which it does for an
+// estimator fitted on a named frame), the export carries those names,
+// [Model.FeatureNames] returns them in column order, and [Assembler] builds
+// inputs from a name-keyed map:
+//
+//	a, err := goml.NewAssembler(clf)   // ErrNoFeatureNames if the export has none
+//	row, err := a.Row(map[string]float64{"petal_length": 1.4, "sepal_width": 3.5})
+//
+// An unknown name is an error; a name the model expects but the map omits is a
+// missing feature. A retrain that reorders or renames features then changes the
+// export rather than silently breaking its callers.
 package goml

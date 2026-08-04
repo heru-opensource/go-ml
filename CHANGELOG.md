@@ -7,6 +7,33 @@ breaking change to the public API requires a minor bump and an entry here.
 
 ## [Unreleased]
 
+### Added
+
+- **Feature names travel with the model.** `tools/sklexport` writes
+  `feature_names` whenever the estimator recorded `feature_names_in_`,
+  `Model.FeatureNames` returns them in column order, `ensemble.WithFeatureNames`
+  attaches them to a hand-built model, and `go-ml-gen` compiles them in. An
+  export without names is unchanged in every respect: `FeatureNames` returns nil.
+- **`goml.Assembler`** builds feature vectors from a name-keyed map, in the
+  model's own column order. An unrecognised name is an error
+  (`ErrUnknownFeature`); a name the model expects but the caller omits is a
+  missing feature (`NaN`). This is the point of carrying names: a vector
+  assembled in the wrong order consists of individually valid numbers, so it
+  cannot be detected downstream — only prevented here.
+- The `serve` example accepts name-keyed `"rows"` alongside positional
+  `"samples"`, and the `batch` example matches the CSV header against the model's
+  feature names, reordering columns rather than trusting their order.
+
+### Changed
+
+- **Breaking for implementers of `goml.Model`:** the interface gained
+  `FeatureNames() []string`. Every model in this repository implements it, and
+  callers of the interface are unaffected — but an out-of-tree `Model` needs the
+  method added (return nil to keep today's behaviour).
+- `testdata/models/iris.json` is now fitted on a named frame, so it carries
+  feature names. The trees are byte-identical to 0.1.1's; the only difference in
+  the export is the new field.
+
 ## [0.1.1] — 2026-07-31
 
 Documentation and examples only: no change to any importable API, so upgrading

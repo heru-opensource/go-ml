@@ -103,10 +103,11 @@ type treeJSON struct {
 }
 
 type forestJSON struct {
-	NFeatures int          `json:"n_features"`
-	NOutputs  int          `json:"n_outputs"`
-	Classes   jsonx.Floats `json:"classes"`
-	Trees     []treeJSON   `json:"trees"`
+	NFeatures    int          `json:"n_features"`
+	NOutputs     int          `json:"n_outputs"`
+	Classes      jsonx.Floats `json:"classes"`
+	FeatureNames []string     `json:"feature_names"`
+	Trees        []treeJSON   `json:"trees"`
 }
 
 func generate(in, outPath, pkg, varName string) error {
@@ -193,7 +194,24 @@ func emitForest(w *bytes.Buffer, varName, typeName string, f *forestJSON) bool {
 	w.WriteString("\tclasses := []float64{")
 	fw.writeFloats(w, f.Classes)
 	w.WriteString("}\n")
-	fmt.Fprintf(w, "\tm, err := ensemble.New%s(%d, classes, trees)\n", typeName, f.NFeatures)
+
+	// Feature names travel with the model when the estimator was fitted on a
+	// named frame. They are the caller's defence against feeding a retrained
+	// model's columns in the old order, so they are compiled in too.
+	opts := ""
+	if len(f.FeatureNames) > 0 {
+		w.WriteString("\tnames := []string{")
+		for i, n := range f.FeatureNames {
+			if i > 0 {
+				w.WriteString(", ")
+			}
+			w.WriteString(strconv.Quote(n))
+		}
+		w.WriteString("}\n")
+		opts = ", ensemble.WithFeatureNames(names)"
+	}
+
+	fmt.Fprintf(w, "\tm, err := ensemble.New%s(%d, classes, trees%s)\n", typeName, f.NFeatures, opts)
 	w.WriteString("\tif err != nil {\n\t\tpanic(\"go-ml-gen: \" + err.Error())\n\t}\n")
 	w.WriteString("\treturn m\n}\n")
 	return fw.usedMath

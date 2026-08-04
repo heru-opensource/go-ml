@@ -9,7 +9,9 @@ reproducible with ``make regen``.
 Models produced:
 
   * ``iris``                - RandomForestClassifier, 4 features, 3 classes
-                              (multiclass); small, for examples.
+                              (multiclass); small, for examples. Fitted on a
+                              named frame, so its export carries
+                              ``feature_names``.
   * ``forest_bench``        - RandomForestClassifier, 30 features, 2 classes;
                               larger, for performance tests.
   * ``extratrees_balanced`` - ExtraTreesClassifier fitted with
@@ -34,6 +36,7 @@ import os
 import sys
 
 import numpy as np
+import pandas as pd
 from sklearn.datasets import load_iris, make_classification
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 
@@ -58,6 +61,12 @@ IMBAL_WEIGHTS = [0.7, 0.2, 0.1]
 IMBAL_TREES = 40
 IMBAL_MAX_DEPTH = 5
 IMBAL_SEED = 0
+
+
+# Tidy column names for the Iris model. scikit-learn's own names carry units
+# ("sepal length (cm)"); these are what a real project's DataFrame tends to look
+# like, and they double as the CSV header in examples/batch.
+IRIS_FEATURES = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 
 
 def with_missing(X, frac, seed):
@@ -93,9 +102,20 @@ def imbalanced_dataset():
     )
 
 
-def train(estimator, X, y, seed, **params):
+def train(estimator, X, y, seed, feature_names=None, **params):
+    """Fit an estimator, optionally on named columns.
+
+    Passing feature_names fits on a DataFrame, which is the only way
+    scikit-learn records ``feature_names_in_`` -- and therefore the only way the
+    export can carry the feature order. It changes nothing about the fitted
+    trees; iris is trained this way and the other two are not, so both paths
+    stay covered.
+    """
     clf = estimator(random_state=seed, **params)
-    clf.fit(with_missing(X, frac=0.05, seed=seed), y)
+    X = with_missing(X, frac=0.05, seed=seed)
+    if feature_names is not None:
+        X = pd.DataFrame(X, columns=feature_names)
+    clf.fit(X, y)
     return clf
 
 
@@ -112,7 +132,8 @@ def main(argv=None):
     bX, by = bench_dataset()
     eX, ey = imbalanced_dataset()
     models = {
-        "iris": train(RandomForestClassifier, iX, iy, seed=0, n_estimators=100, max_depth=6),
+        "iris": train(RandomForestClassifier, iX, iy, seed=0, n_estimators=100, max_depth=6,
+                      feature_names=IRIS_FEATURES),
         "forest_bench": train(RandomForestClassifier, bX, by, seed=BENCH_SEED,
                               n_estimators=BENCH_TREES, max_depth=BENCH_MAX_DEPTH),
         "extratrees_balanced": train(ExtraTreesClassifier, eX, ey, seed=IMBAL_SEED,

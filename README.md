@@ -128,6 +128,35 @@ labels, _ := clf.Predict([][]float64{{1.2, 3.4, math.NaN()}})
 fmt.Println(clf.Classes(), proba, labels)
 ```
 
+### Build inputs by name, not by position
+
+Feature order is part of a model. A vector assembled in the wrong order is made
+of individually valid numbers, so nothing downstream can catch it — the model
+predicts confidently from nonsense. When the estimator was fitted on a named
+frame, scikit-learn records `feature_names_in_`, the export carries it, and
+`goml.Assembler` puts values in the right columns for you:
+
+```go
+fmt.Println(clf.FeatureNames()) // [sepal_length sepal_width petal_length petal_width]
+
+a, err := goml.NewAssembler(clf) // ErrNoFeatureNames if the export has none
+if err != nil {
+    log.Fatal(err)
+}
+
+row, err := a.Row(map[string]float64{ // any order; a wrong name is an error
+    "petal_length": 1.4,
+    "sepal_width":  3.5,
+    "sepal_length": 5.1,
+    // petal_width omitted → math.NaN, the missing-feature convention
+})
+proba, _ := clf.PredictProba([][]float64{row})
+```
+
+A retrain that reorders or renames features changes the export, so callers that
+assemble by name keep working and callers that got it wrong hear about it. Names
+survive static compilation too — `go-ml-gen` emits them alongside the model.
+
 ### Embed the model in your binary
 
 ```go
@@ -198,8 +227,8 @@ python -m sklexport.export your_model.pkl -o model.json
 
 ## Fidelity and its limits
 
-What "matches scikit-learn" means here, precisely. Items 1–8 are what the test
-suite pins; items 9–12 are the boundaries of the claim.
+What "matches scikit-learn" means here, precisely. Items 1–9 are what the test
+suite pins; items 10–13 are the boundaries of the claim.
 
 1. **float32 narrowing.** scikit-learn casts `X` to `float32` before traversal,
    so every split compares `float64(float32(x)) <= threshold` with the threshold
@@ -228,20 +257,26 @@ suite pins; items 9–12 are the boundaries of the claim.
    same scikit-learn fixtures as the JSON path.
 8. **Concurrency.** Loaded models are safe for concurrent use by multiple
    goroutines.
-9. **Prediction only.** No training, no `partial_fit`, no preprocessing
-   pipelines. Whatever your Python code does to features before `predict_proba`,
-   your Go code must do too.
-10. **Single-output classifiers with numeric labels.** `n_outputs_ == 1` only,
+9. **Feature names travel with the model.** When scikit-learn recorded
+   `feature_names_in_`, the export carries it, `Model.FeatureNames` returns it in
+   column order, and static compilation preserves it — so the input contract is
+   the model's to state rather than the caller's to remember. An export without
+   names is ordinary: `FeatureNames` returns nil and everything else is
+   unchanged.
+10. **Prediction only.** No training, no `partial_fit`, no preprocessing
+    pipelines. Whatever your Python code does to features before
+    `predict_proba`, your Go code must do too.
+11. **Single-output classifiers with numeric labels.** `n_outputs_ == 1` only,
     and class labels come across as `float64` (scikit-learn's `classes_` cast);
     string or otherwise non-numeric labels are out of scope. No regressor ships
     yet, though the interfaces and registry are already generic over them.
-11. **go-ml is more permissive than scikit-learn about extreme inputs.**
+12. **go-ml is more permissive than scikit-learn about extreme inputs.**
     scikit-learn's `check_array` rejects `±Inf`, and any value that overflows
     `float32` (`|x| > ~3.4e38`) becomes `Inf` in that cast and is rejected too.
     go-ml validates only the feature *count* — that per-call validation is
     precisely the cost being avoided — so such inputs get an answer here and an
     exception there. Within the finite `float32` range, the two agree.
-12. **Upstream is not pinned.** The fixtures in this repository were produced
+13. **Upstream is not pinned.** The fixtures in this repository were produced
     with scikit-learn 1.9. The exporter reads only the public `tree_` arrays,
     which have been stable for a long time, but nothing here can promise that a
     future scikit-learn predicts the way today's does. Re-validate when you

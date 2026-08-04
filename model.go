@@ -9,6 +9,14 @@ type Model interface {
 	Type() string
 	// NFeatures returns the number of input features each sample must have.
 	NFeatures() int
+	// FeatureNames returns the input feature names in the column order the
+	// model expects, or nil when the export carries none — scikit-learn only
+	// records them (as feature_names_in_) for an estimator fitted on a named
+	// frame, so nil is ordinary and not an error. When they are present, build
+	// inputs with an [Assembler] rather than by hand: a feature vector assembled
+	// in the wrong order is the one mistake this package cannot catch for you,
+	// because every value is individually valid. The returned slice is a copy.
+	FeatureNames() []string
 }
 
 // Classifier predicts class membership, mirroring scikit-learn's classifier

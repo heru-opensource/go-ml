@@ -107,6 +107,21 @@ def _export_tree(tree) -> dict:
     }
 
 
+def _feature_names(est) -> list[str] | None:
+    """The estimator's input feature names, in column order, if it knows them.
+
+    scikit-learn sets ``feature_names_in_`` only when the estimator was fitted
+    on something with named columns (a DataFrame), so this is often absent --
+    which is fine. When it is there it belongs in the export: the order of a
+    feature vector is part of the model, and a caller that assembles it by name
+    cannot silently misfeed a retrained model whose columns moved.
+    """
+    names = getattr(est, "feature_names_in_", None)
+    if names is None:
+        return None
+    return [str(n) for n in names]
+
+
 @register("RandomForestClassifier")
 @register("ExtraTreesClassifier")
 def _export_forest(est) -> dict:
@@ -123,12 +138,16 @@ def _export_forest(est) -> dict:
     if getattr(est, "n_outputs_", 1) != 1:
         raise ValueError("only single-output forests are supported")
     classes = np.asarray(est.classes_, dtype=np.float64).tolist()
-    return {
+    model = {
         "n_features": int(est.n_features_in_),
         "n_outputs": 1,
         "classes": classes,
         "trees": [_export_tree(e.tree_) for e in est.estimators_],
     }
+    names = _feature_names(est)
+    if names is not None:
+        model["feature_names"] = names
+    return model
 
 
 def export_estimator(est) -> dict:
